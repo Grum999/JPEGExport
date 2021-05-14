@@ -293,7 +293,7 @@
       <item>
        <widget class="QPushButton" name="pbCancel">
         <property name="toolTip">
-         <string>Close &lt;i&gt;Composition Helper&lt;/i&gt; window</string>
+         <string>Close &lt;i&gt;JPEG Export&lt;/i&gt; window</string>
         </property>
         <property name="text">
          <string>Cancel</string>
