@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=Krita/PythonPlugin
+X-KDE-Library=jpegexport
+X-Python-2-Compatible=false
+X-Krita-Manual=Manual.html
+Name=JPEG Export
+Comment=A plugin to export document as JPEG format, with preview of exported result
