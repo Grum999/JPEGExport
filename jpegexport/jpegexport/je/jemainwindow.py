@@ -34,6 +34,12 @@ from PyQt5.QtWidgets import (
         QWidget
     )
 
+from .jesettings import (
+        JESettings,
+        JESettingsKey,
+        JESettingsValues
+    )
+
 from jpegexport.pktk.modules.about import AboutWindow
 from jpegexport.pktk.modules.edialog import EDialog
 from jpegexport.pktk.modules.strutils import bytesSizeToStr
@@ -128,11 +134,35 @@ class JEMainWindow(EDialog):
         self.__tmpDocPreview.setBatchmode(True)
         self.__tmpDocPreview.setFileName(self.__tmpExportPreviewFile)
 
+        self.__renderModeChanged()
+
         Krita.instance().activeWindow().addView(self.__tmpDocPreview) # shows it in the application
 
 
     def __initialiseUi(self):
         """Initialise window interface"""
+        JESettings.load()
+
+        self.wJpegOptions.setOptions({
+                'quality': JESettings.get(JESettingsKey.CONFIG_JPEG_QUALITY),
+                'smoothing': JESettings.get(JESettingsKey.CONFIG_JPEG_SMOOTHING),
+                'subsampling': JESettings.get(JESettingsKey.CONFIG_JPEG_SUBSAMPLING),
+                'progressive': JESettings.get(JESettingsKey.CONFIG_JPEG_PROGRESSIVE),
+                'optimize': JESettings.get(JESettingsKey.CONFIG_JPEG_OPTIMIZE),
+                'saveProfile': JESettings.get(JESettingsKey.CONFIG_JPEG_SAVEPROFILE),
+                'transparencyFillcolor': JESettings.get(JESettingsKey.CONFIG_JPEG_TRANSPFILLCOLOR)
+            })
+
+        renderMode=JESettings.get(JESettingsKey.CONFIG_RENDER_MODE)
+        if renderMode==JESettingsValues.RENDER_MODE_FINAL:
+            self.rbRenderNormal.setChecked(True)
+        elif renderMode==JESettingsValues.RENDER_MODE_DIFFVALUE:
+            self.rbRenderDifference.setChecked(True)
+        elif renderMode==JESettingsValues.RENDER_MODE_DIFFBITS:
+            self.rbRenderXOR.setChecked(True)
+        elif renderMode==JESettingsValues.RENDER_MODE_SOURCE:
+            self.rbRenderSrc.setChecked(True)
+
         self.wJpegOptions.optionUpdated.connect(self.__updatePreview)
         self.pbOk.clicked.connect(self.__acceptChange)
         self.pbCancel.clicked.connect(self.__rejectChange)
@@ -154,7 +184,11 @@ class JEMainWindow(EDialog):
         fDialog.setViewMode(QFileDialog.Detail)
         fDialog.setAcceptMode(QFileDialog.AcceptSave)
         fDialog.setDefaultSuffix('jpeg')
-        fDialog.selectFile(self.leFileName.text())
+
+        if self.leFileName.text()!='':
+            fDialog.selectFile(self.leFileName.text())
+        else:
+            fDialog.setDirectory(JESettings.get(JESettingsKey.CONFIG_FILE_LASTPATH))
 
         if fDialog.exec():
             self.leFileName.setText(fDialog.file())
@@ -236,6 +270,32 @@ class JEMainWindow(EDialog):
         """User clicked on OK button"""
         # do export
         self.__accepted=True
+
+        # save export preferences
+        options=self.wJpegOptions.options()
+
+        JESettings.set(JESettingsKey.CONFIG_FILE_LASTPATH, os.path.dirname(self.leFileName.text()))
+
+        JESettings.set(JESettingsKey.CONFIG_JPEG_QUALITY, options['quality'])
+        JESettings.set(JESettingsKey.CONFIG_JPEG_SMOOTHING, options['smoothing'])
+        JESettings.set(JESettingsKey.CONFIG_JPEG_SUBSAMPLING, options['subsampling'])
+        JESettings.set(JESettingsKey.CONFIG_JPEG_PROGRESSIVE, options['progressive'])
+        JESettings.set(JESettingsKey.CONFIG_JPEG_OPTIMIZE, options['optimize'])
+        JESettings.set(JESettingsKey.CONFIG_JPEG_SAVEPROFILE, options['saveProfile'])
+        JESettings.set(JESettingsKey.CONFIG_JPEG_TRANSPFILLCOLOR, options['transparencyFillcolor'].name())
+
+        print(self.rbRenderNormal.isChecked(), self.rbRenderDifference.isChecked())
+        if self.rbRenderNormal.isChecked():
+            JESettings.set(JESettingsKey.CONFIG_RENDER_MODE, JESettingsValues.RENDER_MODE_FINAL)
+        elif self.rbRenderDifference.isChecked():
+            JESettings.set(JESettingsKey.CONFIG_RENDER_MODE, JESettingsValues.RENDER_MODE_DIFFVALUE)
+        elif self.rbRenderXOR.isChecked():
+            JESettings.set(JESettingsKey.CONFIG_RENDER_MODE, JESettingsValues.RENDER_MODE_DIFFBITS)
+        elif self.rbRenderSrc.isChecked():
+            JESettings.set(JESettingsKey.CONFIG_RENDER_MODE, JESettingsValues.RENDER_MODE_SOURCE)
+
+        JESettings.save()
+
         self.close()
 
     def __displayAbout(self):
