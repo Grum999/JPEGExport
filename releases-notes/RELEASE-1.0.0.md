@@ -1,4 +1,4 @@
-# JPEG Export :: Release 1.0.0a [2021-05-xx]
+# JPEG Export :: Release 1.0.0 [2021-05-xx]
 
 First release :-)
 

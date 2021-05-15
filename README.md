@@ -14,26 +14,30 @@ Basically, the plugin use Krita JPEG export capabilities, but add an improved in
 
 ## Screenshots
 
-Main interface, final result preview
+*Main interface, final result preview*
+
 ![Main interface](https://github.com/Grum999/JPEGExport/raw/main/screenshots/main-final.jpeg)
 
-Main interface, difference (bits) result preview
-![Main interface](https://github.com/Grum999/JPEGExport/raw/main/screenshots/main-final.jpeg)
+*Main interface, difference (bits) result preview*
+
+![Main interface](https://github.com/Grum999/JPEGExport/raw/main/screenshots/main-diff.jpeg)
 
 
 ## Functionalities
 
-Here a list of some functionalities:
+Here the list of functionalities:
 - Provides most of JPEG export options
-- Exported result preview in a Krita view (allows to zoom and scroll exported result to check for JPEG compression artifacts)
-- Exported result file size
-- Different render mode (Final result, difference with source)
+- Real time (~1s) export result preview
+- Exported result preview is rendered in a Krita view
+  - *Allows to zoom and scroll on export result preview to check for JPEG compression artifacts*
+- Exported JPEG file size provided
+- Different render modes (Final result, difference with source)
 
 
 ## Download, Install & Execute
 
 ### Download
-+ **[ZIP ARCHIVE - v1.0.0a](https://github.com/Grum999/JPEGExport/releases/download/1.0.0a/jpegexport.zip)**
++ **[ZIP ARCHIVE - v1.0.0](https://github.com/Grum999/JPEGExport/releases/download/1.0.0/jpegexport.zip)**
 + **[SOURCE](https://github.com/Grum999/JPEGExport)**
 
 
@@ -49,16 +53,14 @@ Plugin installation in [Krita](https://krita.org) is not intuitive and needs som
 
 ### Execute
 
-When you want to execute *JPEG Export*, simply go to **File** menu and select **JPEG Export...**.
+User of Krita 4: go to **Tools**>**Scripts** menu and select **JPEG Export...**
+
+User of Krita 5: go to **File** menu and select **JPEG Export...**
 
 
 ### Tested platforms
 
-> Notes:
-> - Plugin is not compatible with Krita 4.x.x; you must have at least Krita 5.x.x
-> - As currently Krita 5 is still in pre-alpha version, plugin is in alpha version and as long as Krita 5 won't be available as a stable version, plugin will be provided as alpha version
-
-Plugin has been tested with Krita 5.0.0 (appimage) on Linux Debian 10
+Plugin has been tested with Krita 4.4.3 and Krita 5.0.0prealpha (appimage) on Linux Debian 10
 
 Currently don't kwow if plugin works on Windows and MacOs, but as plugin don't use specific OS functionalities and/resources, it should be ok.
 
@@ -68,7 +70,7 @@ Currently don't kwow if plugin works on Windows and MacOs, but as plugin don't u
 
 ### What's new?
 
-_[2021-05-xx] Version 1.0.0a_ *[Show detailed release content](https://github.com/Grum999/JPEGExport/blob/main/releases-notes/RELEASE-1.0.0a.md)*
+_[2021-05-xx] Version 1.0.0_ *[Show detailed release content](https://github.com/Grum999/JPEGExport/blob/main/releases-notes/RELEASE-1.0.0.md)*
 
 - First implemented/released version!
 
