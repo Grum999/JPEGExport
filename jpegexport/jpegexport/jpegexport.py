@@ -79,7 +79,7 @@ EXTENSION_ID = 'pykrita_jpegexport'
 PLUGIN_VERSION = '1.0.0'
 PLUGIN_MENU_ENTRY = 'JPEG Export'
 
-REQUIRED_KRITA_VERSION = (5, 0, 0)
+REQUIRED_KRITA_VERSION = (4, 4, 3)
 
 
 class JpegExport(Extension):
@@ -137,11 +137,15 @@ class JpegExport(Extension):
         if not self.__isKritaVersionOk:
             return
 
-        self.__notifier.windowCreated.connect(self.__windowCreated)
+        if checkKritaVersion(5,0,0):
+            self.__notifier.windowCreated.connect(self.__windowCreated)
 
 
     def createActions(self, window):
-        self.__action = window.createAction(EXTENSION_ID, f'{PLUGIN_MENU_ENTRY}...', "file")
+        if checkKritaVersion(5,0,0):
+            self.__action = window.createAction(EXTENSION_ID, f'{PLUGIN_MENU_ENTRY}...', "file")
+        else:
+            self.__action = window.createAction(EXTENSION_ID, f'{PLUGIN_MENU_ENTRY}...', "tools/scripts")
         self.__action.triggered.connect(self.start)
 
     def start(self):
