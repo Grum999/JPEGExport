@@ -70,7 +70,7 @@ Currently don't kwow if plugin works on Windows and MacOs, but as plugin don't u
 
 ### What's new?
 
-_[2021-05-xx] Version 1.0.0_ *[Show detailed release content](https://github.com/Grum999/JPEGExport/blob/main/releases-notes/RELEASE-1.0.0.md)*
+_[2021-05-18] Version 1.0.0_ *[Show detailed release content](https://github.com/Grum999/JPEGExport/blob/main/releases-notes/RELEASE-1.0.0.md)*
 
 - First implemented/released version!
 
