@@ -66,8 +66,11 @@ class JEMainWindow(EDialog):
     def __init__(self, jeName="JPEG Export", jeVersion="testing", parent=None):
         super(JEMainWindow, self).__init__(os.path.join(os.path.dirname(__file__), 'resources', 'jemainwindow.ui'), parent)
 
+        self.__notifier = None
+
         # another instance already exist, exit
         if JEMainWindow.__IS_OPENED:
+            self.close()
             return
 
         self.__accepted=False
@@ -317,7 +320,8 @@ class JEMainWindow(EDialog):
             self.__tmpDocPreview.waitForDone()
             self.__tmpDocPreview.close()
 
-        self.__tmpDoc.close()
+        if self.__tmpDoc:
+            self.__tmpDoc.close()
 
         if os.path.isfile(self.__tmpExportPreviewFile):
             os.remove(self.__tmpExportPreviewFile)
@@ -337,6 +341,10 @@ class JEMainWindow(EDialog):
 
     def closeEvent(self, event):
         """Window is closed"""
+        if not self.__notifier:
+            # exit in init phase, before anything was initialized
+            return
+
         self.__notifier.imageClosed.disconnect(self.__imageClosed)
         self.__closeTempView()
         JEMainWindow.__IS_OPENED=False

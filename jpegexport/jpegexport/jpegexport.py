@@ -76,7 +76,7 @@ else:
 
 
 EXTENSION_ID = 'pykrita_jpegexport'
-PLUGIN_VERSION = '1.0.0a'
+PLUGIN_VERSION = '1.0.0'
 PLUGIN_MENU_ENTRY = 'JPEG Export'
 
 REQUIRED_KRITA_VERSION = (4, 4, 3)
