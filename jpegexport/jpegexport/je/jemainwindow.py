@@ -21,6 +21,7 @@
 
 
 import os
+import os.path
 import re
 import shutil
 from krita import Krita
@@ -155,6 +156,14 @@ class JEMainWindow(EDialog):
                 'saveProfile': JESettings.get(JESettingsKey.CONFIG_JPEG_SAVEPROFILE),
                 'transparencyFillcolor': JESettings.get(JESettingsKey.CONFIG_JPEG_TRANSPFILLCOLOR)
             })
+
+        newFileName=self.__doc.fileName()
+        if newFileName=='':
+            newFileName=os.path.join(os.path.normpath(QStandardPaths.writableLocation(QStandardPaths.HomeLocation)), 'newDocument.jpeg')
+        else:
+            newFileName=re.sub('\.[^.]+$', '.jpeg', newFileName)
+
+        self.leFileName.setText(newFileName)
 
         renderMode=JESettings.get(JESettingsKey.CONFIG_RENDER_MODE)
         if renderMode==JESettingsValues.RENDER_MODE_FINAL:
