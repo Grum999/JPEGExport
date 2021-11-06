@@ -48,10 +48,34 @@ from PyQt5.QtGui import (
         qRgb
     )
 
-from PyQt5.Qt import QObject
+from PyQt5.Qt import (QObject, QMdiArea, QAbstractScrollArea)
 
 
 # -----------------------------------------------------------------------------
+
+class EKritaWindow:
+
+    @staticmethod
+    def scrollbars(window=None):
+        """Return scrollbar instances of window
+
+        If `window` is None, use active window
+
+        Return a tuple (horizontalScrollBar, verticalScrollBar)
+        If there's no active window, return None
+        """
+        window=Krita.instance().activeWindow()
+        if window is None:
+            return None
+
+        qtWindow = Krita.instance().activeWindow().qwindow()
+        mdiArea = qtWindow.centralWidget().findChild(QMdiArea)
+        subWindow = mdiArea.activeSubWindow()
+        scrollArea = subWindow.findChild(QAbstractScrollArea)
+
+        return (scrollArea.horizontalScrollBar(), scrollArea.verticalScrollBar())
+
+
 
 class EKritaDocument:
     """Provides methods to manage Krita Documents"""
