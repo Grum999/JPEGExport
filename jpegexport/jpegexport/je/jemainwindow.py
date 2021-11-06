@@ -48,6 +48,7 @@ from jpegexport.pktk.modules.timeutils import Timer
 from jpegexport.pktk.widgets.wefiledialog import WEFileDialog
 
 from jpegexport.pktk.modules.ekrita import (
+        EKritaWindow,
         EKritaDocument,
         EKritaNode
     )
@@ -77,14 +78,22 @@ class JEMainWindow(EDialog):
         self.__accepted=False
 
         self.__timer=0
-        self.__tmpDoc=None
-        self.__tmpDocPreview=None
+        self.__tmpDoc=None                      # internal document used for export (not added to view)
+        self.__tmpDocTgtNode=None
+        self.__tmpDocPreview=None               # document used for preview (added to view)
         self.__tmpDocPreviewFileNode=None
+        self.__tmpDocPreviewSrcNode=None
 
         self.__jeName = jeName
         self.__jeVersion = jeVersion
 
+        self.__viewScrollbarH=None
+        self.__viewScrollbarV=None
+        self.__positionFull=None
+        self.__positionCrop=None
+
         self.__doc=Krita.instance().activeDocument()
+        self.__bounds=None
 
         if self.__doc is None:
             # no document opened: cancel plugin
@@ -115,23 +124,26 @@ class JEMainWindow(EDialog):
 
         self.show()
 
+
     def __initialiseDoc(self):
         """Initialise temporary document"""
+        self.__calculateBounds()
+
         # The __tmpDoc contain a flatened copy of current document
-        self.__tmpDoc=Krita.instance().createDocument(self.__doc.width(), self.__doc.height(), "Jpeg Export - Temporary preview", self.__doc.colorModel(), self.__doc.colorDepth(), self.__doc.colorProfile(), self.__doc.resolution())
-        node=self.__tmpDoc.createNode("Preview", "paintlayer")
-        node.setPixelData(self.__doc.pixelData(0,0,self.__doc.width(), self.__doc.height()), 0, 0, self.__doc.width(), self.__doc.height() )
-        self.__tmpDoc.rootNode().addChildNode(node, None)
+        self.__tmpDoc=Krita.instance().createDocument(self.__bounds.width(), self.__bounds.height(), "Jpeg Export - Temporary preview", self.__doc.colorModel(), self.__doc.colorDepth(), self.__doc.colorProfile(), self.__doc.resolution())
+        self.__tmpDocTgtNode=self.__tmpDoc.createNode("Preview", "paintlayer")
+        self.__tmpDocTgtNode.setPixelData(self.__doc.pixelData(self.__bounds.x(), self.__bounds.y(), self.__bounds.width(), self.__bounds.height()), 0, 0, self.__bounds.width(), self.__bounds.height() )
+        self.__tmpDoc.rootNode().addChildNode(self.__tmpDocTgtNode, None)
         self.__tmpDoc.setBatchmode(True)
         # force jpeg export
         self.timerEvent(None)
 
         # The __tmpDocPreview contain the Jpeg file for preview
-        self.__tmpDocPreview=Krita.instance().createDocument(self.__doc.width(), self.__doc.height(), "Jpeg Export - Temporary preview", self.__doc.colorModel(), self.__doc.colorDepth(), self.__doc.colorProfile(), self.__doc.resolution())
+        self.__tmpDocPreview=Krita.instance().createDocument(self.__bounds.width(), self.__bounds.height(), "Jpeg Export - Temporary preview", self.__doc.colorModel(), self.__doc.colorDepth(), self.__doc.colorProfile(), self.__doc.resolution())
         # add original document content, as reference for diff
-        node=self.__tmpDoc.createNode("Source", "paintlayer")
-        node.setPixelData(self.__doc.pixelData(0,0,self.__doc.width(), self.__doc.height()), 0, 0, self.__doc.width(), self.__doc.height() )
-        self.__tmpDocPreview.rootNode().addChildNode(node, None)
+        self.__tmpDocPreviewSrcNode=self.__tmpDocPreview.createNode("Source", "paintlayer")
+        self.__tmpDocPreviewSrcNode.setPixelData(self.__doc.pixelData(self.__bounds.x(), self.__bounds.y(), self.__bounds.width(), self.__bounds.height()), 0, 0, self.__bounds.width(), self.__bounds.height() )
+        self.__tmpDocPreview.rootNode().addChildNode(self.__tmpDocPreviewSrcNode, None)
         # add file layer linked to exported jpeg document, to see preview
         self.__tmpDocPreviewFileNode=self.__tmpDocPreview.createFileLayer("Preview", self.__tmpExportFile, "None")
         self.__tmpDocPreview.rootNode().addChildNode(self.__tmpDocPreviewFileNode, None)
@@ -141,6 +153,13 @@ class JEMainWindow(EDialog):
         self.__renderModeChanged()
 
         Krita.instance().activeWindow().addView(self.__tmpDocPreview) # shows it in the application
+
+        scrollbars=EKritaWindow.scrollbars()
+        if scrollbars:
+            self.__viewScrollbarH, self.__viewScrollbarV=scrollbars
+            self.__viewScrollbarH.sliderMoved.connect(self.__updatePosition)
+            self.__viewScrollbarV.sliderMoved.connect(self.__updatePosition)
+            self.__updatePosition()
 
 
     def __initialiseUi(self):
@@ -185,7 +204,79 @@ class JEMainWindow(EDialog):
         self.rbRenderXOR.toggled.connect(self.__renderModeChanged)
         self.rbRenderSrc.toggled.connect(self.__renderModeChanged)
 
+        if self.__doc.selection():
+            self.cbCropToSelection.setEnabled(True)
+        else:
+            self.cbCropToSelection.setEnabled(False)
+
+        self.cbCropToSelection.toggled.connect(self.__updateDoc)
+
         self.tbSaveAs.clicked.connect(self.__saveFileName)
+
+
+    def __updatePosition(self):
+        """Get current slider position"""
+        if self.cbCropToSelection.isEnabled() and self.cbCropToSelection.isChecked():
+            # crop mode
+            self.__positionCrop=QPoint(self.__viewScrollbarH.sliderPosition(), self.__viewScrollbarV.sliderPosition())
+        else:
+            # full mode
+            self.__positionFull=QPoint(self.__viewScrollbarH.sliderPosition(), self.__viewScrollbarV.sliderPosition())
+
+
+    def __calculateBounds(self):
+        """calculate bounds from source document
+        . document if cropped to selection
+        . selection  if not cropped to selection
+        """
+        selection=self.__doc.selection()
+        self.__bounds=None
+
+        if self.cbCropToSelection.isEnabled() and self.cbCropToSelection.isChecked() and selection:
+            self.__bounds=QRect(selection.x(), selection.y(), selection.width(), selection.height()).intersected(QRect(0, 0, self.__doc.width(), self.__doc.height()))
+            if self.__bounds.width()==0 or self.__bounds.height()==0:
+                self.__bounds=None
+                self.cbCropToSelection.setEnabled(False)
+
+        if self.__bounds is None:
+            self.__bounds=QRect(0, 0, self.__doc.width(), self.__doc.height())
+
+
+    def __updateDoc(self):
+        """Update temporary document, taking in account the current checkbox 'Crop to selection' state"""
+        # recalculate bounds
+        self.__calculateBounds()
+
+        # update internal document
+        self.__tmpDoc.setWidth(self.__bounds.width())
+        self.__tmpDoc.setHeight(self.__bounds.height())
+        self.__tmpDocTgtNode.setPixelData(self.__doc.pixelData(self.__bounds.x(), self.__bounds.y(), self.__bounds.width(), self.__bounds.height()), 0, 0, self.__bounds.width(), self.__bounds.height())
+        self.__tmpDoc.refreshProjection()
+
+        # force jpeg export from tmpDoc=>update preview
+        self.timerEvent(None)
+
+        self.__tmpDocPreviewSrcNode.setPixelData(self.__doc.pixelData(self.__bounds.x(), self.__bounds.y(), self.__bounds.width(), self.__bounds.height()), 0, 0, self.__bounds.width(), self.__bounds.height())
+        self.__tmpDocPreview.setWidth(self.__bounds.width())
+        self.__tmpDocPreview.setHeight(self.__bounds.height())
+        self.__tmpDocPreview.refreshProjection()
+
+        if self.cbCropToSelection.isEnabled() and self.cbCropToSelection.isChecked():
+            # crop mode
+            if self.__positionCrop is None:
+                # no position in memory, center
+                for scrollbar in [self.__viewScrollbarH, self.__viewScrollbarV]:
+                    newPosition=scrollbar.minimum()+(scrollbar.maximum() - scrollbar.minimum())//2
+                    scrollbar.setSliderPosition(newPosition)
+            else:
+                # last position memorized, restore
+                self.__viewScrollbarH.setSliderPosition(self.__positionCrop.x())
+                self.__viewScrollbarV.setSliderPosition(self.__positionCrop.y())
+        else:
+            # last position memorized, restore
+            self.__viewScrollbarH.setSliderPosition(self.__positionFull.x())
+            self.__viewScrollbarV.setSliderPosition(self.__positionFull.y())
+
 
 
     def __saveFileName(self):
@@ -250,7 +341,7 @@ class JEMainWindow(EDialog):
             # the waitForDone() does nothing in this case, reset is still made asynchronously....
             self.__tmpDocPreview.waitForDone()
             # ...so the dirty solution: put a one second sleep :-/
-            # it doesn't fix the problem (1250ms could be too long or to short, according to computer and image size)
+            # it doesn't fix the problem (1250ms could be too long or too short, according to computer and image size)
             # but that's better than nothing
             Timer.sleep(1250)
 
@@ -278,6 +369,7 @@ class JEMainWindow(EDialog):
         """User clicked on cancel button"""
         self.close()
 
+
     def __acceptChange(self):
         """User clicked on OK button"""
         # do export
@@ -296,7 +388,6 @@ class JEMainWindow(EDialog):
         JESettings.set(JESettingsKey.CONFIG_JPEG_SAVEPROFILE, options['saveProfile'])
         JESettings.set(JESettingsKey.CONFIG_JPEG_TRANSPFILLCOLOR, options['transparencyFillcolor'].name())
 
-        print(self.rbRenderNormal.isChecked(), self.rbRenderDifference.isChecked())
         if self.rbRenderNormal.isChecked():
             JESettings.set(JESettingsKey.CONFIG_RENDER_MODE, JESettingsValues.RENDER_MODE_FINAL)
         elif self.rbRenderDifference.isChecked():
@@ -310,9 +401,11 @@ class JEMainWindow(EDialog):
 
         self.close()
 
+
     def __displayAbout(self):
         # display about window
         AboutWindow(self.__jeName, self.__jeVersion, os.path.join(os.path.dirname(__file__), 'resources', 'png', 'buli-powered-big.png'), None, ':JPEG Export')
+
 
     def __closeTempView(self):
         if self.__timer!=0:
@@ -328,9 +421,14 @@ class JEMainWindow(EDialog):
             self.__tmpDocPreview.save()
             self.__tmpDocPreview.waitForDone()
             self.__tmpDocPreview.close()
+            self.__tmpDocPreview.waitForDone()
+            self.__tmpDocPreview=None
+            self.__tmpDocPreviewFileNode=None
 
         if self.__tmpDoc:
             self.__tmpDoc.close()
+            self.__tmpDoc.waitForDone()
+            self.__tmpDoc=None
 
         if os.path.isfile(self.__tmpExportPreviewFile):
             os.remove(self.__tmpExportPreviewFile)

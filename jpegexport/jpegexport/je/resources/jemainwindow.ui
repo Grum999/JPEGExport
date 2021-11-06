@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1024</width>
-    <height>740</height>
+    <height>894</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -198,7 +198,7 @@
       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Rendered preview is the difference between final JPEG export and original source.&lt;/p&gt;&lt;p&gt;What you see is difference at bit level from original source and final JPEG export:&lt;/p&gt;&lt;p&gt;- Darker pixels means low difference&lt;/p&gt;&lt;p&gt;- Lighter pixels means high difference&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
      <property name="text">
-      <string>D&amp;ifference (bits)</string>
+      <string>Difference (bi&amp;ts)</string>
      </property>
      <attribute name="buttonGroup">
       <string notr="true">buttonGroup</string>
@@ -216,6 +216,33 @@
      <attribute name="buttonGroup">
       <string notr="true">buttonGroup</string>
      </attribute>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="label_4">
+     <property name="font">
+      <font>
+       <pointsize>12</pointsize>
+       <weight>75</weight>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: palette(light);padding: 6;</string>
+     </property>
+     <property name="text">
+      <string>Miscellaneous options</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="cbCropToSelection">
+     <property name="toolTip">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Crop exported JPEG document to &lt;span style=&quot; font-style:italic;&quot;&gt;bounds &lt;/span&gt;defined from current selection defined on source document (if any).&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+     <property name="text">
+      <string>Crop to selection</string>
+     </property>
     </widget>
    </item>
    <item>
