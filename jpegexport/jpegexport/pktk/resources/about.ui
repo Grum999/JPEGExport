@@ -160,6 +160,9 @@
            <property name="text">
             <string/>
            </property>
+           <property name="pixmap">
+            <pixmap>png/buli-powered-big.png</pixmap>
+           </property>
           </widget>
          </item>
          <item>

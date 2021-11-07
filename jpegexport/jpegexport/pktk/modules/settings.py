@@ -59,12 +59,14 @@ class SettingsFmt(object):
             raise EInvalidType(f'Given `value` ({value}) is not from expected type ({checkType})')
 
         if not self.__values is None:
-            if isinstance(value, list) or isinstance(value, tuple):
-                # need to check all items
-                if isinstance(self.__values, type):
+            if isinstance(value, (list, tuple)):
+                # value is a list, need to check all items in the list
+                if isinstance(self.__values, (list, tuple)):
+                    # possible values provided as a list
                     # check if all items are of given type
                     for item in value:
-                        self.check(item, self.__values)
+                        if not item in self.__values:
+                            raise EInvalidValue('Given `value` ({0}) is not in authorized perimeter ({1})'.format(item, self.__values))
                 else:
                     # check items values
                     for item in value:
