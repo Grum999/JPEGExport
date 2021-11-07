@@ -44,6 +44,7 @@ from .jesettings import (
 from jpegexport.pktk.modules.about import AboutWindow
 from jpegexport.pktk.modules.edialog import EDialog
 from jpegexport.pktk.modules.strutils import bytesSizeToStr
+from jpegexport.pktk.modules.imgutils import imgBoxSize
 from jpegexport.pktk.modules.timeutils import Timer
 from jpegexport.pktk.widgets.wefiledialog import WEFileDialog
 
@@ -64,6 +65,22 @@ class JEMainWindow(EDialog):
 
     # delay between modified properties and preview update
     __UPDATE_DELAY=375
+    __RESIZE_DELAY=625
+
+    __UPDATE_MODE_CROP=   0b00000001
+    __UPDATE_MODE_RESIZE= 0b00000010
+
+    __RESIZE_METHOD=[
+            (i18n('B-Spline'),          JESettingsValues.FILTER_BSPLINE),
+            ('Bell',                    JESettingsValues.FILTER_BELL),
+            (i18n('Bicubic'),           JESettingsValues.FILTER_BICUBIC),
+            (i18n('Bilinear'),          JESettingsValues.FILTER_BILINEAR),
+            ('Hermite',                 JESettingsValues.FILTER_HERMITE),
+            (i18n('Lancsoz3'),          JESettingsValues.FILTER_LANCZOS3),
+            ('Mitchell',                JESettingsValues.FILTER_MITCHELL),
+            (i18n('Nearest neighbour'), JESettingsValues.FILTER_NEAREST_NEIGHBOUR)
+        ]
+
 
     def __init__(self, jeName="JPEG Export", jeVersion="testing", parent=None):
         super(JEMainWindow, self).__init__(os.path.join(os.path.dirname(__file__), 'resources', 'jemainwindow.ui'), parent)
@@ -77,7 +94,9 @@ class JEMainWindow(EDialog):
 
         self.__accepted=False
 
-        self.__timer=0
+        self.__timerPreview=0                   # timer used for preview update
+        self.__timerResize=0                    # timer used for resize update
+
         self.__tmpDoc=None                      # internal document used for export (not added to view)
         self.__tmpDocTgtNode=None
         self.__tmpDocPreview=None               # document used for preview (added to view)
@@ -93,7 +112,8 @@ class JEMainWindow(EDialog):
         self.__positionCrop=None
 
         self.__doc=Krita.instance().activeDocument()
-        self.__bounds=None
+        self.__boundsSource=None
+        self.__sizeTarget=None
 
         if self.__doc is None:
             # no document opened: cancel plugin
@@ -125,24 +145,32 @@ class JEMainWindow(EDialog):
         self.show()
 
 
+    def showEvent(self, event):
+        """Dialog is visible"""
+        # define minimum width for pct input value, according to current width defined for width/height input values
+        self.dsbResizePct.setMinimumWidth(self.sbResizedMaxWidth.width()+self.sbResizedMaxHeight.width()+self.lblResizeX.width())
+        self.dsbResizePct.setMaximumWidth(self.sbResizedMaxWidth.width()+self.sbResizedMaxHeight.width()+self.lblResizeX.width())
+        self.__updateResizeUnit(False)
+
+
     def __initialiseDoc(self):
         """Initialise temporary document"""
         self.__calculateBounds()
 
         # The __tmpDoc contain a flatened copy of current document
-        self.__tmpDoc=Krita.instance().createDocument(self.__bounds.width(), self.__bounds.height(), "Jpeg Export - Temporary preview", self.__doc.colorModel(), self.__doc.colorDepth(), self.__doc.colorProfile(), self.__doc.resolution())
+        self.__tmpDoc=Krita.instance().createDocument(self.__boundsSource.width(), self.__boundsSource.height(), "Jpeg Export - Temporary preview", self.__doc.colorModel(), self.__doc.colorDepth(), self.__doc.colorProfile(), self.__doc.resolution())
         self.__tmpDocTgtNode=self.__tmpDoc.createNode("Preview", "paintlayer")
-        self.__tmpDocTgtNode.setPixelData(self.__doc.pixelData(self.__bounds.x(), self.__bounds.y(), self.__bounds.width(), self.__bounds.height()), 0, 0, self.__bounds.width(), self.__bounds.height() )
+        #self.__tmpDocTgtNode.setPixelData(self.__doc.pixelData(self.__boundsSource.x(), self.__boundsSource.y(), self.__boundsSource.width(), self.__boundsSource.height()), 0, 0, self.__boundsSource.width(), self.__boundsSource.height() )
         self.__tmpDoc.rootNode().addChildNode(self.__tmpDocTgtNode, None)
         self.__tmpDoc.setBatchmode(True)
         # force jpeg export
         self.timerEvent(None)
 
         # The __tmpDocPreview contain the Jpeg file for preview
-        self.__tmpDocPreview=Krita.instance().createDocument(self.__bounds.width(), self.__bounds.height(), "Jpeg Export - Temporary preview", self.__doc.colorModel(), self.__doc.colorDepth(), self.__doc.colorProfile(), self.__doc.resolution())
+        self.__tmpDocPreview=Krita.instance().createDocument(self.__boundsSource.width(), self.__boundsSource.height(), "Jpeg Export - Temporary preview", self.__doc.colorModel(), self.__doc.colorDepth(), self.__doc.colorProfile(), self.__doc.resolution())
         # add original document content, as reference for diff
         self.__tmpDocPreviewSrcNode=self.__tmpDocPreview.createNode("Source", "paintlayer")
-        self.__tmpDocPreviewSrcNode.setPixelData(self.__doc.pixelData(self.__bounds.x(), self.__bounds.y(), self.__bounds.width(), self.__bounds.height()), 0, 0, self.__bounds.width(), self.__bounds.height() )
+        #self.__tmpDocPreviewSrcNode.setPixelData(self.__doc.pixelData(self.__boundsSource.x(), self.__boundsSource.y(), self.__boundsSource.width(), self.__boundsSource.height()), 0, 0, self.__boundsSource.width(), self.__boundsSource.height() )
         self.__tmpDocPreview.rootNode().addChildNode(self.__tmpDocPreviewSrcNode, None)
         # add file layer linked to exported jpeg document, to see preview
         self.__tmpDocPreviewFileNode=self.__tmpDocPreview.createFileLayer("Preview", self.__tmpExportFile, "None")
@@ -150,9 +178,10 @@ class JEMainWindow(EDialog):
         self.__tmpDocPreview.setBatchmode(True)
         self.__tmpDocPreview.setFileName(self.__tmpExportPreviewFile)
 
-        self.__renderModeChanged()
 
         Krita.instance().activeWindow().addView(self.__tmpDocPreview) # shows it in the application
+
+        #self.lblDocDimension.setText(i18n(f"Dimensions: {self.__tmpDoc.width()}x{self.__tmpDoc.height()}"))
 
         scrollbars=EKritaWindow.scrollbars()
         if scrollbars:
@@ -160,6 +189,9 @@ class JEMainWindow(EDialog):
             self.__viewScrollbarH.sliderMoved.connect(self.__updatePosition)
             self.__viewScrollbarV.sliderMoved.connect(self.__updatePosition)
             self.__updatePosition()
+
+        self.__updateDoc()
+        self.__renderModeChanged()
 
 
     def __initialiseUi(self):
@@ -178,7 +210,7 @@ class JEMainWindow(EDialog):
 
         newFileName=self.__doc.fileName()
         if newFileName=='':
-            newFileName=os.path.join(os.path.normpath(QStandardPaths.writableLocation(QStandardPaths.HomeLocation)), 'newDocument.jpeg')
+            newFileName=os.path.join(JESettings.get(JESettingsKey.CONFIG_FILE_LASTPATH), 'newDocument.jpeg')
         else:
             newFileName=re.sub('\.[^.]+$', '.jpeg', newFileName)
 
@@ -204,18 +236,54 @@ class JEMainWindow(EDialog):
         self.rbRenderXOR.toggled.connect(self.__renderModeChanged)
         self.rbRenderSrc.toggled.connect(self.__renderModeChanged)
 
-        if self.__doc.selection():
+
+        # crop
+        self.cbCropToSelection.setChecked(JESettings.get(JESettingsKey.CONFIG_MISC_CROP_ACTIVE))
+        selection=self.__doc.selection()
+        if selection:
             self.cbCropToSelection.setEnabled(True)
+            self.cbCropToSelection.setText(i18n("Crop to selection")+f" ({selection.width()}x{selection.height()})")
         else:
             self.cbCropToSelection.setEnabled(False)
 
-        self.cbCropToSelection.toggled.connect(self.__updateDoc)
+        # resize
+        self.cbResizeDocument.setChecked(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE))
+
+        self.cbxResizedUnit.addItem('px')
+        self.cbxResizedUnit.addItem('%')
+        self.cbxResizedUnit.setCurrentText(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_UNIT))
+
+
+        defaultSelected=JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_FILTER)
+        for index, value in enumerate(JEMainWindow.__RESIZE_METHOD):
+            self.cbxResizeFilter.addItem(value[0], value[1])
+            if value[1]==defaultSelected:
+                self.cbxResizeFilter.setCurrentIndex(index)
+
+        self.dsbResizePct.setValue(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE))
+        self.sbResizedMaxWidth.setValue(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH))
+        self.sbResizedMaxHeight.setValue(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT))
+        self.wResizeOptions.setEnabled(self.cbResizeDocument.isChecked())
+
+        # signals
+        self.cbCropToSelection.toggled.connect(lambda x: self.__updateDoc(JEMainWindow.__UPDATE_MODE_CROP))
+        self.cbResizeDocument.toggled.connect(lambda x: self.__updateNewSize(True))
+        self.cbxResizedUnit.currentIndexChanged.connect(lambda x: self.__updateResizeUnit(True))
+        self.cbxResizeFilter.currentIndexChanged.connect(lambda x: self.__updateNewSize(False))
+        self.sbResizedMaxWidth.valueChanged.connect(lambda x: self.__updateNewSize(False))
+        self.sbResizedMaxHeight.valueChanged.connect(lambda x: self.__updateNewSize(False))
+        self.dsbResizePct.valueChanged.connect(lambda x: self.__updateNewSize(False))
 
         self.tbSaveAs.clicked.connect(self.__saveFileName)
+        self.leFileName.mouseDoubleClickEvent=lambda x: self.__saveFileName()
 
 
     def __updatePosition(self):
         """Get current slider position"""
+        if not self.__viewScrollbarH:
+            # can occurs during initialisation phase
+            return
+
         if self.cbCropToSelection.isEnabled() and self.cbCropToSelection.isChecked():
             # crop mode
             self.__positionCrop=QPoint(self.__viewScrollbarH.sliderPosition(), self.__viewScrollbarV.sliderPosition())
@@ -230,35 +298,97 @@ class JEMainWindow(EDialog):
         . selection  if not cropped to selection
         """
         selection=self.__doc.selection()
-        self.__bounds=None
+        self.__boundsSource=None
 
         if self.cbCropToSelection.isEnabled() and self.cbCropToSelection.isChecked() and selection:
-            self.__bounds=QRect(selection.x(), selection.y(), selection.width(), selection.height()).intersected(QRect(0, 0, self.__doc.width(), self.__doc.height()))
-            if self.__bounds.width()==0 or self.__bounds.height()==0:
-                self.__bounds=None
+            self.__boundsSource=QRect(selection.x(), selection.y(), selection.width(), selection.height()).intersected(QRect(0, 0, self.__doc.width(), self.__doc.height()))
+            if self.__boundsSource.width()==0 or self.__boundsSource.height()==0:
+                self.__boundsSource=None
                 self.cbCropToSelection.setEnabled(False)
 
-        if self.__bounds is None:
-            self.__bounds=QRect(0, 0, self.__doc.width(), self.__doc.height())
+        if self.__boundsSource is None:
+            self.__boundsSource=QRect(0, 0, self.__doc.width(), self.__doc.height())
+
+        self.__updateNewSize(False, True)
 
 
-    def __updateDoc(self):
-        """Update temporary document, taking in account the current checkbox 'Crop to selection' state"""
+    def __updateResizeUnit(self, updateSize=True):
+        """Unit has been modified (px, %)
+
+        Update width/height according to unit
+        """
+        if self.cbxResizedUnit.currentIndex()==0:
+            # from % to px
+            self.dsbResizePct.setVisible(False)
+            self.sbResizedMaxWidth.setVisible(True)
+            self.lblResizeX.setVisible(True)
+            self.sbResizedMaxHeight.setVisible(True)
+        else:
+            # from px to %
+            self.sbResizedMaxWidth.setVisible(False)
+            self.lblResizeX.setVisible(False)
+            self.sbResizedMaxHeight.setVisible(False)
+            self.dsbResizePct.setVisible(True)
+
+        if updateSize:
+            self.__updateNewSize(True, False)
+
+
+    def __updateNewSize(self, immediate=False, recalculateOnly=False):
+        """Size (width and/or height) has been changed
+
+        Trigger an __updateDoc after few milliseconds
+        The delay let the possibility to user to change height (after width has been modified, for example) before resizing process is applied
+        """
+        self.__updatePosition()
+
+        if self.__timerResize!=0:
+            self.killTimer(self.__timerResize)
+            self.__timerResize=0
+
+        if self.cbResizeDocument.isChecked():
+            # resize checked, recalculate target size
+            if self.cbxResizedUnit.currentIndex()==0:
+                # pixels
+                self.__sizeTarget=imgBoxSize(self.__boundsSource.size(), QSize(self.sbResizedMaxWidth.value(), self.sbResizedMaxHeight.value()))
+            else:
+                # pct
+                self.__sizeTarget=QSize(round(self.__boundsSource.width() * self.dsbResizePct.value() / 100), round(self.__boundsSource.height() * self.dsbResizePct.value() / 100))
+        else:
+            # resize not checked, target size=source size
+            self.__sizeTarget=QSize(self.__boundsSource.size())
+
+        if not recalculateOnly:
+            if immediate:
+                self.__updateDoc(JEMainWindow.__UPDATE_MODE_RESIZE)
+            else:
+                self.__timerResize=self.startTimer(JEMainWindow.__RESIZE_DELAY)
+
+
+    def __updateDoc(self, mode=None):
+        """Update temporary document, taking in account the current checkbox 'Crop to selection' & 'Resize document' state"""
         # recalculate bounds
         self.__calculateBounds()
 
+        self.wResizeOptions.setEnabled(self.cbResizeDocument.isChecked())
+        applyResize=(self.__sizeTarget!=self.__boundsSource.size())
+
+        if not applyResize and mode==JEMainWindow.__UPDATE_MODE_RESIZE and self.__sizeTarget==self.__tmpDoc.bounds().size():
+            return
+
         # update internal document
-        self.__tmpDoc.setWidth(self.__bounds.width())
-        self.__tmpDoc.setHeight(self.__bounds.height())
-        self.__tmpDocTgtNode.setPixelData(self.__doc.pixelData(self.__bounds.x(), self.__bounds.y(), self.__bounds.width(), self.__bounds.height()), 0, 0, self.__bounds.width(), self.__bounds.height())
+        self.__tmpDoc.crop(0, 0, self.__boundsSource.width(), self.__boundsSource.height())
+        self.__tmpDocTgtNode.setPixelData(self.__doc.pixelData(self.__boundsSource.x(), self.__boundsSource.y(), self.__boundsSource.width(), self.__boundsSource.height()), 0, 0, self.__boundsSource.width(), self.__boundsSource.height())
+        if applyResize:
+            resolution=self.__tmpDoc.xRes()
+            self.__tmpDoc.scaleImage(self.__sizeTarget.width(), self.__sizeTarget.height(), resolution, resolution, self.cbxResizeFilter.currentData())
         self.__tmpDoc.refreshProjection()
 
         # force jpeg export from tmpDoc=>update preview
         self.timerEvent(None)
 
-        self.__tmpDocPreviewSrcNode.setPixelData(self.__doc.pixelData(self.__bounds.x(), self.__bounds.y(), self.__bounds.width(), self.__bounds.height()), 0, 0, self.__bounds.width(), self.__bounds.height())
-        self.__tmpDocPreview.setWidth(self.__bounds.width())
-        self.__tmpDocPreview.setHeight(self.__bounds.height())
+        self.__tmpDocPreview.crop(0, 0, self.__tmpDoc.width(), self.__tmpDoc.height())
+        self.__tmpDocPreviewSrcNode.setPixelData(self.__tmpDoc.pixelData(0, 0, self.__tmpDoc.width(), self.__tmpDoc.height()), 0, 0, self.__tmpDoc.width(), self.__tmpDoc.height())
         self.__tmpDocPreview.refreshProjection()
 
         if self.cbCropToSelection.isEnabled() and self.cbCropToSelection.isChecked():
@@ -277,6 +407,7 @@ class JEMainWindow(EDialog):
             self.__viewScrollbarH.setSliderPosition(self.__positionFull.x())
             self.__viewScrollbarV.setSliderPosition(self.__positionFull.y())
 
+        self.lblDocDimension.setText(i18n(f"Dimensions: {self.__tmpDoc.width()}x{self.__tmpDoc.height()}"))
 
 
     def __saveFileName(self):
@@ -304,7 +435,7 @@ class JEMainWindow(EDialog):
             self.__tmpDocPreviewFileNode.setBlendingMode('normal')
             self.__tmpDocPreviewFileNode.setVisible(True)
         elif self.rbRenderDifference.isChecked():
-            self.__tmpDocPreviewFileNode.setBlendingMode('diff')
+            self.__tmpDocPreviewFileNode.setBlendingMode('divisive_modulo_continuous')
             self.__tmpDocPreviewFileNode.setVisible(True)
         elif self.rbRenderXOR.isChecked():
             self.__tmpDocPreviewFileNode.setBlendingMode('xor')
@@ -316,42 +447,49 @@ class JEMainWindow(EDialog):
 
     def __updatePreview(self):
         """Update preview, according to current jpeg export settings"""
-        if self.__timer!=0:
+        if self.__timerPreview!=0:
             # if a timer is already running, kill it
-            self.killTimer(self.__timer)
+            self.killTimer(self.__timerPreview)
         # create a new timer, waiting a little bit before rendering preview
         # (avoid to render preview each time a property is modified)
-        self.__timer=self.startTimer(JEMainWindow.__UPDATE_DELAY)
+        self.__timerPreview=self.startTimer(JEMainWindow.__UPDATE_DELAY)
 
 
     def timerEvent(self, event):
         """Update preview when timer is triggered"""
-        self.killTimer(self.__timer)
-        self.__timer=0
+        if event is None or event.timerId()==self.__timerPreview:
+            # it's a timer preview; refresh preview :-)
+            self.killTimer(self.__timerPreview)
+            self.__timerPreview=0
 
-        self.lblEstSize.setText(i18n('Estimated file size: (calculating)'))
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        QApplication.processEvents()
-        self.__tmpDoc.exportImage(self.__tmpExportFile, self.wJpegOptions.options(True))
+            self.lblEstSize.setText(i18n('Estimated file size: (calculating)'))
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+            QApplication.processEvents()
+            self.__tmpDoc.exportImage(self.__tmpExportFile, self.wJpegOptions.options(True))
 
-        if self.__tmpDocPreviewFileNode:
-            # force file to be reloaded, but it's made asynchronously
-            self.__tmpDocPreviewFileNode.resetCache()
+            if self.__tmpDocPreviewFileNode:
+                # force file to be reloaded, but it's made asynchronously
+                self.__tmpDocPreviewFileNode.resetCache()
 
-            # the waitForDone() does nothing in this case, reset is still made asynchronously....
-            self.__tmpDocPreview.waitForDone()
-            # ...so the dirty solution: put a one second sleep :-/
-            # it doesn't fix the problem (1250ms could be too long or too short, according to computer and image size)
-            # but that's better than nothing
-            Timer.sleep(1250)
+                # the waitForDone() does nothing in this case, reset is still made asynchronously....
+                self.__tmpDocPreview.waitForDone()
+                # ...so the dirty solution: put a one second sleep :-/
+                # it doesn't fix the problem (1250ms could be too long or too short, according to computer and image size)
+                # but that's better than nothing
+                Timer.sleep(1250)
 
-        try:
-            size=os.path.getsize(self.__tmpExportFile)
-            self.lblEstSize.setText(i18n(f'Estimated file size: {bytesSizeToStr(size)}'))
-        except Exception as e:
-            self.lblEstSize.setText(i18n('Estimated file size: unable to calculate'))
+            try:
+                size=os.path.getsize(self.__tmpExportFile)
+                self.lblEstSize.setText(i18n(f'Estimated file size: {bytesSizeToStr(size)}'))
+            except Exception as e:
+                self.lblEstSize.setText(i18n('Estimated file size: unable to calculate'))
 
-        QApplication.restoreOverrideCursor()
+            QApplication.restoreOverrideCursor()
+        elif event.timerId()==self.__timerResize:
+            # it's a timer resize; update resize
+            self.killTimer(self.__timerResize)
+            self.__timerResize=0
+            self.__updateDoc(JEMainWindow.__UPDATE_MODE_RESIZE)
 
 
     def __imageClosed(self, docName):
@@ -397,6 +535,16 @@ class JEMainWindow(EDialog):
         elif self.rbRenderSrc.isChecked():
             JESettings.set(JESettingsKey.CONFIG_RENDER_MODE, JESettingsValues.RENDER_MODE_SOURCE)
 
+
+        JESettings.set(JESettingsKey.CONFIG_MISC_CROP_ACTIVE, self.cbCropToSelection.isChecked())
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE, self.cbResizeDocument.isChecked())
+
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_UNIT, self.cbxResizedUnit.currentText())
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_FILTER, self.cbxResizeFilter.currentData())
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE, self.dsbResizePct.value())
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH, self.sbResizedMaxWidth.value())
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT, self.sbResizedMaxHeight.value())
+
         JESettings.save()
 
         self.close()
@@ -408,8 +556,8 @@ class JEMainWindow(EDialog):
 
 
     def __closeTempView(self):
-        if self.__timer!=0:
-            self.killTimer(self.__timer)
+        if self.__timerPreview!=0:
+            self.killTimer(self.__timerPreview)
 
         if self.__tmpDocPreview:
             # note:

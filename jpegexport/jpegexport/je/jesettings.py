@@ -67,6 +67,20 @@ class JESettingsValues(object):
     JPEG_SUBSAMPLING_440 =                                  2
     JPEG_SUBSAMPLING_444 =                                  3
 
+    UNIT_PX =                                               'px'
+    UNIT_PCT =                                              '%'
+
+    FILTER_BSPLINE =                                        'BSpline'
+    FILTER_BELL =                                           'Bell'
+    FILTER_BICUBIC =                                        'Bicubic'
+    FILTER_BILINEAR =                                       'Bilinear'
+    FILTER_HERMITE =                                        'Hermite'
+    FILTER_LANCZOS3 =                                       'Lanczos3'
+    FILTER_MITCHELL =                                       'Mitchell'
+    FILTER_NEAREST_NEIGHBOUR =                              'Box'
+
+
+
 class JESettingsKey(SettingsKey):
     CONFIG_FILE_LASTPATH =                                  'config.file.lastPath'
 
@@ -80,6 +94,16 @@ class JESettingsKey(SettingsKey):
 
     CONFIG_RENDER_MODE =                                    'config.render.mode'
 
+    CONFIG_MISC_CROP_ACTIVE =                               'config.options.crop.active'
+    CONFIG_MISC_RESIZE_ACTIVE =                             'config.options.resize.active'
+    CONFIG_MISC_RESIZE_UNIT =                               'config.options.resize.unit'
+    CONFIG_MISC_RESIZE_PCT_VALUE =                          'config.options.resize.pct.value'
+    CONFIG_MISC_RESIZE_PX_WIDTH =                           'config.options.resize.px.width'
+    CONFIG_MISC_RESIZE_PX_HEIGHT =                          'config.options.resize.px.height'
+    CONFIG_MISC_RESIZE_FILTER =                             'config.options.resize.filter'
+
+
+
 class JESettings(Settings):
     """Manage JPEG Export settings (keep in memory last preferences used for export)
 
@@ -92,25 +116,40 @@ class JESettings(Settings):
             pluginId = 'jpegexport'
 
         rules = [
-            SettingsRule(JESettingsKey.CONFIG_FILE_LASTPATH,                                '',                         SettingsFmt(str)),
+            SettingsRule(JESettingsKey.CONFIG_FILE_LASTPATH,                                os.path.normpath(QStandardPaths.writableLocation(QStandardPaths.HomeLocation)),
+                                                                                                                                SettingsFmt(str)),
 
-            SettingsRule(JESettingsKey.CONFIG_JPEG_QUALITY,                                 85,                         SettingsFmt(int, (0, 100) )),
-            SettingsRule(JESettingsKey.CONFIG_JPEG_SMOOTHING,                               15,                         SettingsFmt(int, (0, 100) )),
+            SettingsRule(JESettingsKey.CONFIG_JPEG_QUALITY,                                 85,                                 SettingsFmt(int, (0, 100) )),
+            SettingsRule(JESettingsKey.CONFIG_JPEG_SMOOTHING,                               15,                                 SettingsFmt(int, (0, 100) )),
             SettingsRule(JESettingsKey.CONFIG_JPEG_SUBSAMPLING,                             JESettingsValues.JPEG_SUBSAMPLING_444,
-                                                                                                                        SettingsFmt(int, [JESettingsValues.JPEG_SUBSAMPLING_420,
-                                                                                                                                          JESettingsValues.JPEG_SUBSAMPLING_422,
-                                                                                                                                          JESettingsValues.JPEG_SUBSAMPLING_440,
-                                                                                                                                          JESettingsValues.JPEG_SUBSAMPLING_444])),
-            SettingsRule(JESettingsKey.CONFIG_JPEG_PROGRESSIVE,                             True,                       SettingsFmt(bool)),
-            SettingsRule(JESettingsKey.CONFIG_JPEG_OPTIMIZE,                                True,                       SettingsFmt(bool)),
-            SettingsRule(JESettingsKey.CONFIG_JPEG_SAVEPROFILE,                             False,                      SettingsFmt(bool)),
-            SettingsRule(JESettingsKey.CONFIG_JPEG_TRANSPFILLCOLOR,                         '#ffffff',                  SettingsFmt(str)),
+                                                                                                                                SettingsFmt(int, [JESettingsValues.JPEG_SUBSAMPLING_420,
+                                                                                                                                                  JESettingsValues.JPEG_SUBSAMPLING_422,
+                                                                                                                                                  JESettingsValues.JPEG_SUBSAMPLING_440,
+                                                                                                                                                  JESettingsValues.JPEG_SUBSAMPLING_444])),
+            SettingsRule(JESettingsKey.CONFIG_JPEG_PROGRESSIVE,                             True,                               SettingsFmt(bool)),
+            SettingsRule(JESettingsKey.CONFIG_JPEG_OPTIMIZE,                                True,                               SettingsFmt(bool)),
+            SettingsRule(JESettingsKey.CONFIG_JPEG_SAVEPROFILE,                             False,                              SettingsFmt(bool)),
+            SettingsRule(JESettingsKey.CONFIG_JPEG_TRANSPFILLCOLOR,                         '#ffffff',                          SettingsFmt(str)),
 
-            SettingsRule(JESettingsKey.CONFIG_RENDER_MODE,                                  JESettingsValues.RENDER_MODE_FINAL,
-                                                                                                                        SettingsFmt(str, [JESettingsValues.RENDER_MODE_FINAL,
-                                                                                                                                          JESettingsValues.RENDER_MODE_DIFFVALUE,
-                                                                                                                                          JESettingsValues.RENDER_MODE_DIFFBITS,
-                                                                                                                                          JESettingsValues.RENDER_MODE_SOURCE])),
+            SettingsRule(JESettingsKey.CONFIG_RENDER_MODE,                                  JESettingsValues.RENDER_MODE_FINAL, SettingsFmt(str, [JESettingsValues.RENDER_MODE_FINAL,
+                                                                                                                                                  JESettingsValues.RENDER_MODE_DIFFVALUE,
+                                                                                                                                                  JESettingsValues.RENDER_MODE_DIFFBITS,
+                                                                                                                                                  JESettingsValues.RENDER_MODE_SOURCE])),
+
+            SettingsRule(JESettingsKey.CONFIG_MISC_CROP_ACTIVE,                             False,                              SettingsFmt(bool)),
+            SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE,                           False,                              SettingsFmt(bool)),
+            SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_UNIT,                             JESettingsValues.UNIT_PX,           SettingsFmt(str, [JESettingsValues.UNIT_PX, JESettingsValues.UNIT_PCT])),
+            SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE,                        100.00,                             SettingsFmt(float, (0.01, 1000.00))),
+            SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH,                         1000,                               SettingsFmt(int, (1, 32000))),
+            SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT,                        1000,                               SettingsFmt(int, (1, 32000))),
+            SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_FILTER,                           JESettingsValues.FILTER_BICUBIC,    SettingsFmt(str, [JESettingsValues.FILTER_BSPLINE,
+                                                                                                                                                  JESettingsValues.FILTER_BELL,
+                                                                                                                                                  JESettingsValues.FILTER_BICUBIC,
+                                                                                                                                                  JESettingsValues.FILTER_BILINEAR,
+                                                                                                                                                  JESettingsValues.FILTER_HERMITE,
+                                                                                                                                                  JESettingsValues.FILTER_LANCZOS3,
+                                                                                                                                                  JESettingsValues.FILTER_MITCHELL,
+                                                                                                                                                  JESettingsValues.FILTER_NEAREST_NEIGHBOUR])),
         ]
 
         super(JESettings, self).__init__(pluginId, rules)
