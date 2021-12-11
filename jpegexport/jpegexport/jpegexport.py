@@ -48,6 +48,7 @@ if __name__ != '__main__':
             PkTk
         )
     from jpegexport.pktk.modules.utils import checkKritaVersion
+    from jpegexport.pktk.modules.uitheme import UITheme
     from jpegexport.je.jemainwindow import JEMainWindow
 else:
     # Execution from 'Scripter' plugin?
@@ -70,6 +71,7 @@ else:
             PkTk
         )
     from jpegexport.pktk.modules.utils import checkKritaVersion
+    from jpegexport.pktk.modules.uitheme import UITheme
     from jpegexport.je.jemainwindow import JEMainWindow
 
     print("======================================")
@@ -152,7 +154,10 @@ class JpegExport(Extension):
         if not self.__isKritaVersionOk:
             return
 
+
         if checkKritaVersion(5,0,0):
+            UITheme.load()
+            
             self.__notifier.setActive(True)
             self.__notifier.windowCreated.connect(self.__windowCreated)
 
