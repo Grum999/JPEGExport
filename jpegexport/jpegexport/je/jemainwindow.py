@@ -496,10 +496,15 @@ class JEMainWindow(EDialog):
         """A view has been closed; check if it's one of view used for documents"""
         if docName==self.__tmpExportPreviewFile:
             # preview has been closed: cancel current JPEG Export
+            # has file has been closed, pointer to document and file layer are not
+            # valid anymore, must define pointer to None
             self.__tmpDocPreview=None
+            self.__tmpDocPreviewFileNode=None
+            self.__closeDocPreview(True)
             self.__rejectChange()
         elif docName==self.__docFileName:
-            # original soruce document has been closed: cancel current JPEG Export
+            # original source document has been closed: cancel current JPEG Export
+            self.__closeDocPreview(True)
             self.__rejectChange()
 
 
@@ -555,10 +560,8 @@ class JEMainWindow(EDialog):
         AboutWindow(self.__jeName, self.__jeVersion, os.path.join(os.path.dirname(__file__), 'resources', 'png', 'buli-powered-big.png'), None, ':JPEG Export')
 
 
-    def __closeTempView(self):
-        if self.__timerPreview!=0:
-            self.killTimer(self.__timerPreview)
-
+    def __closeDocPreview(self, deleteTmpFile=False):
+        """Close the temporary document preview"""
         if self.__tmpDocPreview:
             # note:
             #   closing a document that has been modified and added into a view seems
@@ -566,20 +569,39 @@ class JEMainWindow(EDialog):
             #   that's a problem here, and batch mode doesn't change anything
             #   the dirty trick is to save document in a temp file, close document,
             #   and finally delete temp file
+            if self.__tmpDocPreviewFileNode:
+                # due to bug: https://bugs.kde.org/show_bug.cgi?id=446832
+                #   => need to disconnect file layer with None value
+                #      it will generate one ASSERT warning but it's better than having
+                #      a warning emitted everyt 10 seconds :-/
+                #   => to remove when bug will be fixed
+                self.__tmpDocPreviewFileNode.setProperties(None, 'None')
+
+                self.__tmpDocPreviewFileNode.remove()
+                self.__tmpDocPreviewFileNode=None
+
             self.__tmpDocPreview.save()
             self.__tmpDocPreview.waitForDone()
             self.__tmpDocPreview.close()
-            self.__tmpDocPreview.waitForDone()
             self.__tmpDocPreview=None
-            self.__tmpDocPreviewFileNode=None
+
+        if os.path.isfile(self.__tmpExportPreviewFile):
+            os.remove(self.__tmpExportPreviewFile)
+
+        if deleteTmpFile and os.path.isfile(self.__tmpExportFile):
+            os.remove(self.__tmpExportFile)
+
+
+    def __closeTempView(self):
+        if self.__timerPreview!=0:
+            self.killTimer(self.__timerPreview)
+
+        self.__closeDocPreview(False)
 
         if self.__tmpDoc:
             self.__tmpDoc.close()
             self.__tmpDoc.waitForDone()
             self.__tmpDoc=None
-
-        if os.path.isfile(self.__tmpExportPreviewFile):
-            os.remove(self.__tmpExportPreviewFile)
 
         if os.path.isfile(self.__tmpExportFile):
             if self.__accepted:
@@ -600,6 +622,9 @@ class JEMainWindow(EDialog):
             # exit in init phase, before anything was initialized
             return
 
-        self.__notifier.imageClosed.disconnect(self.__imageClosed)
+        try:
+            self.__notifier.imageClosed.disconnect(self.__imageClosed)
+        except:
+            pass
         self.__closeTempView()
         JEMainWindow.__IS_OPENED=False
