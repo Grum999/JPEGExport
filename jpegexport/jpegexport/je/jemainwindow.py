@@ -67,6 +67,8 @@ class JEMainWindow(EDialog):
     __UPDATE_DELAY=375
     __RESIZE_DELAY=625
 
+    __MAX_WIDTH_AND_HEIGHT=32000
+
     __UPDATE_MODE_CROP=   0b00000001
     __UPDATE_MODE_RESIZE= 0b00000010
 
@@ -249,9 +251,11 @@ class JEMainWindow(EDialog):
         # resize
         self.cbResizeDocument.setChecked(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE))
 
-        self.cbxResizedUnit.addItem('px')
-        self.cbxResizedUnit.addItem('%')
-        self.cbxResizedUnit.setCurrentText(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_UNIT))
+        self.cbxResizedUnit.addItem('px', 'px')
+        self.cbxResizedUnit.addItem('%', '%')
+        self.cbxResizedUnit.addItem('px (width)', 'wpx')
+        self.cbxResizedUnit.addItem('px (height)', 'hpx')
+        self.cbxResizedUnit.setCurrentIndex(self.__cbxIndexForUnit(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_UNIT)))
 
 
         defaultSelected=JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_FILTER)
@@ -276,6 +280,17 @@ class JEMainWindow(EDialog):
 
         self.tbSaveAs.clicked.connect(self.__saveFileName)
         self.leFileName.mouseDoubleClickEvent=lambda x: self.__saveFileName()
+
+
+    def __cbxIndexForUnit(self, unit):
+        """Return index for given unit for cbxResizedUnit
+
+        Otherwise return None
+        """
+        for index in range(self.cbxResizedUnit.count()):
+            if self.cbxResizedUnit.itemData(index)==unit:
+                return index
+        return None
 
 
     def __updatePosition(self):
@@ -313,22 +328,34 @@ class JEMainWindow(EDialog):
 
 
     def __updateResizeUnit(self, updateSize=True):
-        """Unit has been modified (px, %)
+        """Unit has been modified (px, %, wpx, hpx)
 
         Update width/height according to unit
         """
-        if self.cbxResizedUnit.currentIndex()==0:
-            # from % to px
+        if self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PX:
+            # to 'px'
             self.dsbResizePct.setVisible(False)
             self.sbResizedMaxWidth.setVisible(True)
             self.lblResizeX.setVisible(True)
             self.sbResizedMaxHeight.setVisible(True)
-        else:
-            # from px to %
+        elif self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PCT:
+            # to '%'
             self.sbResizedMaxWidth.setVisible(False)
             self.lblResizeX.setVisible(False)
             self.sbResizedMaxHeight.setVisible(False)
             self.dsbResizePct.setVisible(True)
+        elif self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PX_WIDTH:
+            # to 'wpx'
+            self.dsbResizePct.setVisible(False)
+            self.sbResizedMaxWidth.setVisible(True)
+            self.lblResizeX.setVisible(False)
+            self.sbResizedMaxHeight.setVisible(False)
+        elif self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PX_HEIGHT:
+            # to 'hpx'
+            self.dsbResizePct.setVisible(False)
+            self.sbResizedMaxWidth.setVisible(False)
+            self.lblResizeX.setVisible(False)
+            self.sbResizedMaxHeight.setVisible(True)
 
         if updateSize:
             self.__updateNewSize(True, False)
@@ -348,12 +375,18 @@ class JEMainWindow(EDialog):
 
         if self.cbResizeDocument.isChecked():
             # resize checked, recalculate target size
-            if self.cbxResizedUnit.currentIndex()==0:
+            if self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PX:
                 # pixels
                 self.__sizeTarget=imgBoxSize(self.__boundsSource.size(), QSize(self.sbResizedMaxWidth.value(), self.sbResizedMaxHeight.value()))
-            else:
+            elif self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PCT:
                 # pct
                 self.__sizeTarget=QSize(round(self.__boundsSource.width() * self.dsbResizePct.value() / 100), round(self.__boundsSource.height() * self.dsbResizePct.value() / 100))
+            elif self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PX_WIDTH:
+                # pixels
+                self.__sizeTarget=imgBoxSize(self.__boundsSource.size(), QSize(self.sbResizedMaxWidth.value(), JEMainWindow.__MAX_WIDTH_AND_HEIGHT))
+            elif self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PX_HEIGHT:
+                # pixels
+                self.__sizeTarget=imgBoxSize(self.__boundsSource.size(), QSize(JEMainWindow.__MAX_WIDTH_AND_HEIGHT, self.sbResizedMaxHeight.value()))
         else:
             # resize not checked, target size=source size
             self.__sizeTarget=QSize(self.__boundsSource.size())
@@ -496,10 +529,15 @@ class JEMainWindow(EDialog):
         """A view has been closed; check if it's one of view used for documents"""
         if docName==self.__tmpExportPreviewFile:
             # preview has been closed: cancel current JPEG Export
+            # has file has been closed, pointer to document and file layer are not
+            # valid anymore, must define pointer to None
             self.__tmpDocPreview=None
+            self.__tmpDocPreviewFileNode=None
+            self.__closeDocPreview(True)
             self.__rejectChange()
         elif docName==self.__docFileName:
-            # original soruce document has been closed: cancel current JPEG Export
+            # original source document has been closed: cancel current JPEG Export
+            self.__closeDocPreview(True)
             self.__rejectChange()
 
 
@@ -539,7 +577,7 @@ class JEMainWindow(EDialog):
         JESettings.set(JESettingsKey.CONFIG_MISC_CROP_ACTIVE, self.cbCropToSelection.isChecked())
         JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE, self.cbResizeDocument.isChecked())
 
-        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_UNIT, self.cbxResizedUnit.currentText())
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_UNIT, self.cbxResizedUnit.currentData())
         JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_FILTER, self.cbxResizeFilter.currentData())
         JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE, self.dsbResizePct.value())
         JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH, self.sbResizedMaxWidth.value())
@@ -555,10 +593,8 @@ class JEMainWindow(EDialog):
         AboutWindow(self.__jeName, self.__jeVersion, os.path.join(os.path.dirname(__file__), 'resources', 'png', 'buli-powered-big.png'), None, ':JPEG Export')
 
 
-    def __closeTempView(self):
-        if self.__timerPreview!=0:
-            self.killTimer(self.__timerPreview)
-
+    def __closeDocPreview(self, deleteTmpFile=False):
+        """Close the temporary document preview"""
         if self.__tmpDocPreview:
             # note:
             #   closing a document that has been modified and added into a view seems
@@ -566,20 +602,39 @@ class JEMainWindow(EDialog):
             #   that's a problem here, and batch mode doesn't change anything
             #   the dirty trick is to save document in a temp file, close document,
             #   and finally delete temp file
+            if self.__tmpDocPreviewFileNode:
+                # due to bug: https://bugs.kde.org/show_bug.cgi?id=446832
+                #   => need to disconnect file layer with None value
+                #      it will generate one ASSERT warning but it's better than having
+                #      a warning emitted everyt 10 seconds :-/
+                #   => to remove when bug will be fixed
+                self.__tmpDocPreviewFileNode.setProperties(None, 'None')
+
+                self.__tmpDocPreviewFileNode.remove()
+                self.__tmpDocPreviewFileNode=None
+
             self.__tmpDocPreview.save()
             self.__tmpDocPreview.waitForDone()
             self.__tmpDocPreview.close()
-            self.__tmpDocPreview.waitForDone()
             self.__tmpDocPreview=None
-            self.__tmpDocPreviewFileNode=None
+
+        if os.path.isfile(self.__tmpExportPreviewFile):
+            os.remove(self.__tmpExportPreviewFile)
+
+        if deleteTmpFile and os.path.isfile(self.__tmpExportFile):
+            os.remove(self.__tmpExportFile)
+
+
+    def __closeTempView(self):
+        if self.__timerPreview!=0:
+            self.killTimer(self.__timerPreview)
+
+        self.__closeDocPreview(False)
 
         if self.__tmpDoc:
             self.__tmpDoc.close()
             self.__tmpDoc.waitForDone()
             self.__tmpDoc=None
-
-        if os.path.isfile(self.__tmpExportPreviewFile):
-            os.remove(self.__tmpExportPreviewFile)
 
         if os.path.isfile(self.__tmpExportFile):
             if self.__accepted:
@@ -600,6 +655,9 @@ class JEMainWindow(EDialog):
             # exit in init phase, before anything was initialized
             return
 
-        self.__notifier.imageClosed.disconnect(self.__imageClosed)
+        try:
+            self.__notifier.imageClosed.disconnect(self.__imageClosed)
+        except:
+            pass
         self.__closeTempView()
         JEMainWindow.__IS_OPENED=False

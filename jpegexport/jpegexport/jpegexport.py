@@ -48,6 +48,7 @@ if __name__ != '__main__':
             PkTk
         )
     from jpegexport.pktk.modules.utils import checkKritaVersion
+    from jpegexport.pktk.modules.uitheme import UITheme
     from jpegexport.je.jemainwindow import JEMainWindow
 else:
     # Execution from 'Scripter' plugin?
@@ -70,13 +71,14 @@ else:
             PkTk
         )
     from jpegexport.pktk.modules.utils import checkKritaVersion
+    from jpegexport.pktk.modules.uitheme import UITheme
     from jpegexport.je.jemainwindow import JEMainWindow
 
     print("======================================")
 
 
 EXTENSION_ID = 'pykrita_jpegexport'
-PLUGIN_VERSION = '1.1.0'
+PLUGIN_VERSION = '1.2.0'
 PLUGIN_MENU_ENTRY = 'JPEG Export'
 
 REQUIRED_KRITA_VERSION = (4, 4, 3)
@@ -109,22 +111,35 @@ class JpegExport(Extension):
         actionRef=None
 
         # search for menu 'File'
-        for action in Krita.instance().activeWindow().qwindow().menuBar().actions():
-            if action.objectName()=='file':
-                menuFile=action.menu()
-                break
+        menuFile=Krita.instance().activeWindow().qwindow().findChild(QMenu,'file')
 
-        if menuFile:
+        if isinstance(menuFile, QMenu):
             # search for 'Export Advanced...' action
-            for action in Krita.instance().actions():
-                #print(action, action.objectName())
-                if action.objectName() == 'file_export_advanced':
-                    actionRef=action
-                    break
+            actionRef=Krita.instance().action('file_export_advanced')
 
-            # move action to right place
-            menuFile.removeAction(self.__action)
-            menuFile.insertAction(actionRef, self.__action)
+            if actionRef:
+                # move action to right place
+                menuFile.removeAction(self.__action)
+                menuFile.insertAction(actionRef, self.__action)
+            else:
+                # not found??
+                # fallback
+                actionRef=Krita.instance().action('file_export_file')
+
+                getNext=False
+                for action in menuFile.actions():
+                    if action.objectName()=='file_export_file':
+                        getNext=True
+                    elif getNext:
+                        actionRef=action
+                        break
+
+            if actionRef:
+                # move action to right place
+                menuFile.removeAction(self.__action)
+                menuFile.insertAction(actionRef, self.__action)
+            else:
+                qError('Unable to find <file_export_advanced> neither <file_export_file>!')
 
             # update icon
             self.__action.setIcon(QIcon(actionRef.icon()))
@@ -140,6 +155,9 @@ class JpegExport(Extension):
             return
 
         if checkKritaVersion(5,0,0):
+            UITheme.load()
+
+            self.__notifier.setActive(True)
             self.__notifier.windowCreated.connect(self.__windowCreated)
 
 
