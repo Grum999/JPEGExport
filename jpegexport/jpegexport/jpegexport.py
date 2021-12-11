@@ -154,10 +154,9 @@ class JpegExport(Extension):
         if not self.__isKritaVersionOk:
             return
 
-
         if checkKritaVersion(5,0,0):
             UITheme.load()
-            
+
             self.__notifier.setActive(True)
             self.__notifier.windowCreated.connect(self.__windowCreated)
 
