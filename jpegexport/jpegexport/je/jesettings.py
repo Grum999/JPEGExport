@@ -69,6 +69,8 @@ class JESettingsValues(object):
 
     UNIT_PX =                                               'px'
     UNIT_PCT =                                              '%'
+    UNIT_PX_WIDTH =                                         'wpx'
+    UNIT_PX_HEIGHT =                                        'hpx'
 
     FILTER_BSPLINE =                                        'BSpline'
     FILTER_BELL =                                           'Bell'
@@ -138,7 +140,10 @@ class JESettings(Settings):
 
             SettingsRule(JESettingsKey.CONFIG_MISC_CROP_ACTIVE,                             False,                              SettingsFmt(bool)),
             SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE,                           False,                              SettingsFmt(bool)),
-            SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_UNIT,                             JESettingsValues.UNIT_PX,           SettingsFmt(str, [JESettingsValues.UNIT_PX, JESettingsValues.UNIT_PCT])),
+            SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_UNIT,                             JESettingsValues.UNIT_PX,           SettingsFmt(str, [JESettingsValues.UNIT_PX, 
+                                                                                                                                                  JESettingsValues.UNIT_PCT,
+                                                                                                                                                  JESettingsValues.UNIT_PX_WIDTH,
+                                                                                                                                                  JESettingsValues.UNIT_PX_HEIGHT])),
             SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE,                        100.00,                             SettingsFmt(float, (0.01, 1000.00))),
             SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH,                         1000,                               SettingsFmt(int, (1, 32000))),
             SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT,                        1000,                               SettingsFmt(int, (1, 32000))),

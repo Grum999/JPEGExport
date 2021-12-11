@@ -67,6 +67,8 @@ class JEMainWindow(EDialog):
     __UPDATE_DELAY=375
     __RESIZE_DELAY=625
 
+    __MAX_WIDTH_AND_HEIGHT=32000
+
     __UPDATE_MODE_CROP=   0b00000001
     __UPDATE_MODE_RESIZE= 0b00000010
 
@@ -249,9 +251,11 @@ class JEMainWindow(EDialog):
         # resize
         self.cbResizeDocument.setChecked(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE))
 
-        self.cbxResizedUnit.addItem('px')
-        self.cbxResizedUnit.addItem('%')
-        self.cbxResizedUnit.setCurrentText(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_UNIT))
+        self.cbxResizedUnit.addItem('px', 'px')
+        self.cbxResizedUnit.addItem('%', '%')
+        self.cbxResizedUnit.addItem('px (width)', 'wpx')
+        self.cbxResizedUnit.addItem('px (height)', 'hpx')
+        self.cbxResizedUnit.setCurrentIndex(self.__cbxIndexForUnit(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_UNIT)))
 
 
         defaultSelected=JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_FILTER)
@@ -276,6 +280,17 @@ class JEMainWindow(EDialog):
 
         self.tbSaveAs.clicked.connect(self.__saveFileName)
         self.leFileName.mouseDoubleClickEvent=lambda x: self.__saveFileName()
+
+
+    def __cbxIndexForUnit(self, unit):
+        """Return index for given unit for cbxResizedUnit
+
+        Otherwise return None
+        """
+        for index in range(self.cbxResizedUnit.count()):
+            if self.cbxResizedUnit.itemData(index)==unit:
+                return index
+        return None
 
 
     def __updatePosition(self):
@@ -313,22 +328,34 @@ class JEMainWindow(EDialog):
 
 
     def __updateResizeUnit(self, updateSize=True):
-        """Unit has been modified (px, %)
+        """Unit has been modified (px, %, wpx, hpx)
 
         Update width/height according to unit
         """
-        if self.cbxResizedUnit.currentIndex()==0:
-            # from % to px
+        if self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PX:
+            # to 'px'
             self.dsbResizePct.setVisible(False)
             self.sbResizedMaxWidth.setVisible(True)
             self.lblResizeX.setVisible(True)
             self.sbResizedMaxHeight.setVisible(True)
-        else:
-            # from px to %
+        elif self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PCT:
+            # to '%'
             self.sbResizedMaxWidth.setVisible(False)
             self.lblResizeX.setVisible(False)
             self.sbResizedMaxHeight.setVisible(False)
             self.dsbResizePct.setVisible(True)
+        elif self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PX_WIDTH:
+            # to 'wpx'
+            self.dsbResizePct.setVisible(False)
+            self.sbResizedMaxWidth.setVisible(True)
+            self.lblResizeX.setVisible(False)
+            self.sbResizedMaxHeight.setVisible(False)
+        elif self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PX_HEIGHT:
+            # to 'hpx'
+            self.dsbResizePct.setVisible(False)
+            self.sbResizedMaxWidth.setVisible(False)
+            self.lblResizeX.setVisible(False)
+            self.sbResizedMaxHeight.setVisible(True)
 
         if updateSize:
             self.__updateNewSize(True, False)
@@ -348,12 +375,18 @@ class JEMainWindow(EDialog):
 
         if self.cbResizeDocument.isChecked():
             # resize checked, recalculate target size
-            if self.cbxResizedUnit.currentIndex()==0:
+            if self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PX:
                 # pixels
                 self.__sizeTarget=imgBoxSize(self.__boundsSource.size(), QSize(self.sbResizedMaxWidth.value(), self.sbResizedMaxHeight.value()))
-            else:
+            elif self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PCT:
                 # pct
                 self.__sizeTarget=QSize(round(self.__boundsSource.width() * self.dsbResizePct.value() / 100), round(self.__boundsSource.height() * self.dsbResizePct.value() / 100))
+            elif self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PX_WIDTH:
+                # pixels
+                self.__sizeTarget=imgBoxSize(self.__boundsSource.size(), QSize(self.sbResizedMaxWidth.value(), JEMainWindow.__MAX_WIDTH_AND_HEIGHT))
+            elif self.cbxResizedUnit.currentData()==JESettingsValues.UNIT_PX_HEIGHT:
+                # pixels
+                self.__sizeTarget=imgBoxSize(self.__boundsSource.size(), QSize(JEMainWindow.__MAX_WIDTH_AND_HEIGHT, self.sbResizedMaxHeight.value()))
         else:
             # resize not checked, target size=source size
             self.__sizeTarget=QSize(self.__boundsSource.size())
@@ -544,7 +577,7 @@ class JEMainWindow(EDialog):
         JESettings.set(JESettingsKey.CONFIG_MISC_CROP_ACTIVE, self.cbCropToSelection.isChecked())
         JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE, self.cbResizeDocument.isChecked())
 
-        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_UNIT, self.cbxResizedUnit.currentText())
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_UNIT, self.cbxResizedUnit.currentData())
         JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_FILTER, self.cbxResizeFilter.currentData())
         JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE, self.dsbResizePct.value())
         JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH, self.sbResizedMaxWidth.value())
