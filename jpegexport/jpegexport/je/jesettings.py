@@ -1,4 +1,4 @@
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # JPEG Export
 # Copyright (C) 2020 - Grum999
 # -----------------------------------------------------------------------------
@@ -82,7 +82,6 @@ class JESettingsValues(object):
     FILTER_NEAREST_NEIGHBOUR =                              'Box'
 
 
-
 class JESettingsKey(SettingsKey):
     CONFIG_FILE_LASTPATH =                                  'config.file.lastPath'
 
@@ -105,7 +104,6 @@ class JESettingsKey(SettingsKey):
     CONFIG_MISC_RESIZE_FILTER =                             'config.options.resize.filter'
 
 
-
 class JESettings(Settings):
     """Manage JPEG Export settings (keep in memory last preferences used for export)
 
@@ -121,8 +119,8 @@ class JESettings(Settings):
             SettingsRule(JESettingsKey.CONFIG_FILE_LASTPATH,                                os.path.normpath(QStandardPaths.writableLocation(QStandardPaths.HomeLocation)),
                                                                                                                                 SettingsFmt(str)),
 
-            SettingsRule(JESettingsKey.CONFIG_JPEG_QUALITY,                                 85,                                 SettingsFmt(int, (0, 100) )),
-            SettingsRule(JESettingsKey.CONFIG_JPEG_SMOOTHING,                               15,                                 SettingsFmt(int, (0, 100) )),
+            SettingsRule(JESettingsKey.CONFIG_JPEG_QUALITY,                                 85,                                 SettingsFmt(int, (0, 100))),
+            SettingsRule(JESettingsKey.CONFIG_JPEG_SMOOTHING,                               15,                                 SettingsFmt(int, (0, 100))),
             SettingsRule(JESettingsKey.CONFIG_JPEG_SUBSAMPLING,                             JESettingsValues.JPEG_SUBSAMPLING_444,
                                                                                                                                 SettingsFmt(int, [JESettingsValues.JPEG_SUBSAMPLING_420,
                                                                                                                                                   JESettingsValues.JPEG_SUBSAMPLING_422,
@@ -140,7 +138,7 @@ class JESettings(Settings):
 
             SettingsRule(JESettingsKey.CONFIG_MISC_CROP_ACTIVE,                             False,                              SettingsFmt(bool)),
             SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE,                           False,                              SettingsFmt(bool)),
-            SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_UNIT,                             JESettingsValues.UNIT_PX,           SettingsFmt(str, [JESettingsValues.UNIT_PX, 
+            SettingsRule(JESettingsKey.CONFIG_MISC_RESIZE_UNIT,                             JESettingsValues.UNIT_PX,           SettingsFmt(str, [JESettingsValues.UNIT_PX,
                                                                                                                                                   JESettingsValues.UNIT_PCT,
                                                                                                                                                   JESettingsValues.UNIT_PX_WIDTH,
                                                                                                                                                   JESettingsValues.UNIT_PX_HEIGHT])),

@@ -37,7 +37,7 @@ Here the list of functionalities:
 ## Download, Install & Execute
 
 ### Download
-+ **[ZIP ARCHIVE - v1.2.0](https://github.com/Grum999/JPEGExport/releases/download/1.2.0/jpegexport.zip)**
++ **[ZIP ARCHIVE - v1.2.1](https://github.com/Grum999/JPEGExport/releases/download/1.2.1/jpegexport.zip)**
 + **[SOURCE](https://github.com/Grum999/JPEGExport)**
 
 
@@ -60,15 +60,16 @@ User of Krita 5: go to **File** menu and select **JPEG Export...**
 
 ### Tested platforms
 
-Plugin has been tested with Krita 4.4.8 and Krita 5.0.0-beta5 (appimage) on Linux Debian 10
-
-Currently don't kwow if plugin works on Windows and MacOs, but as plugin don't use specific OS functionalities and/resources, it should be ok.
-
+Version 1.2.1 requires Krita 5.2
+Version 1.2.0 requires Krita 5.1
 
 
 ## Plugin's life
 
 ### What's new?
+
+_[2023-05-09] Version 1.2.1_ [>> Show detailed release content <<](./releases-notes/RELEASE-1.2.1.md)
+- Fix bug *Krita 5.2.0 Compatibility*
 
 _[2021-12-11] Version 1.2.0_ *[Show detailed release content](./releases-notes/RELEASE-1.2.0.md)*
 - Implement *Resize from width or from height*
@@ -107,7 +108,7 @@ Any idea are welcome.
 
 *JPEG Export* is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
-You should receive a copy of the GNU General Public License along with *Buli Commander*. If not, see <https://www.gnu.org/licenses/>.
+You should receive a copy of the GNU General Public License along with *JPEG Export*. If not, see <https://www.gnu.org/licenses/>.
 
 
 Long story short: you're free to download, modify as well as redistribute *JPEG Export* as long as this ability is preserved and you give contributors proper credit. This is the same license under which Krita is released, ensuring compatibility between the two.
