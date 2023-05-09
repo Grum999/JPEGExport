@@ -78,10 +78,10 @@ else:
 
 
 EXTENSION_ID = 'pykrita_jpegexport'
-PLUGIN_VERSION = '1.2.0'
+PLUGIN_VERSION = '1.2.1'
 PLUGIN_MENU_ENTRY = 'JPEG Export'
 
-REQUIRED_KRITA_VERSION = (4, 4, 3)
+REQUIRED_KRITA_VERSION = (5, 2, 0)
 
 PkTk.setPackageName('jpegexport')
 
@@ -97,25 +97,25 @@ class JpegExport(Extension):
         self.parent = parent
         self.__uiController = None
         self.__isKritaVersionOk = checkKritaVersion(*REQUIRED_KRITA_VERSION)
-        self.__dlgParentWidget=QWidget()
-        self.__action=None
-        self.__notifier=Krita.instance().notifier()
+        self.__dlgParentWidget = QWidget()
+        self.__action = None
+        self.__notifier = Krita.instance().notifier()
 
 
     def __windowCreated(self):
         """Main window has been created"""
         def aboutToShowFileMenu():
-            self.__action.setEnabled(len(Krita.instance().activeWindow().views())>0)
+            self.__action.setEnabled(len(Krita.instance().activeWindow().views()) > 0)
 
-        menuFile=None
-        actionRef=None
+        menuFile = None
+        actionRef = None
 
         # search for menu 'File'
-        menuFile=Krita.instance().activeWindow().qwindow().findChild(QMenu,'file')
+        menuFile = Krita.instance().activeWindow().qwindow().findChild(QMenu,'file')
 
         if isinstance(menuFile, QMenu):
             # search for 'Export Advanced...' action
-            actionRef=Krita.instance().action('file_export_advanced')
+            actionRef = Krita.instance().action('file_export_advanced')
 
             if actionRef:
                 # move action to right place
@@ -124,14 +124,14 @@ class JpegExport(Extension):
             else:
                 # not found??
                 # fallback
-                actionRef=Krita.instance().action('file_export_file')
+                actionRef = Krita.instance().action('file_export_file')
 
-                getNext=False
+                getNext = False
                 for action in menuFile.actions():
-                    if action.objectName()=='file_export_file':
-                        getNext=True
+                    if action.objectName() == 'file_export_file':
+                        getNext = True
                     elif getNext:
-                        actionRef=action
+                        actionRef = action
                         break
 
             if actionRef:
@@ -185,6 +185,6 @@ if __PLUGIN_EXEC_FROM__ == 'SCRIPTER_PLUGIN':
     sys.stdout = sys.__stdout__
 
     # Disconnect signals if any before assigning new signals
-    ch=JpegExport(Krita.instance())
+    ch = JpegExport(Krita.instance())
     ch.setup()
     ch.start()
