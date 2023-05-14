@@ -196,7 +196,12 @@ def loadXmlUi(fileName, parent):
 
 def cloneRect(rect):
     """Clone a QRect"""
-    return QRect(rect.left(), rect.top(), rect.width(), rect.height())
+    if isinstance(rect, QRect):
+        return QRect(rect.left(), rect.top(), rect.width(), rect.height())
+    elif isinstance(rect, QRectF):
+        return QRectF(rect.left(), rect.top(), rect.width(), rect.height())
+    else:
+        raise EInvalidType('Given `rect` must be a <QRect> or <QRectF>')
 
 
 def regExIsValid(regex):
