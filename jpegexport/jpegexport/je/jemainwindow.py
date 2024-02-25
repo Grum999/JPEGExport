@@ -459,6 +459,7 @@ class JEMainWindow(EDialog):
         fDialog.setViewMode(QFileDialog.Detail)
         fDialog.setAcceptMode(QFileDialog.AcceptSave)
         fDialog.setDefaultSuffix('jpeg')
+        fDialog.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint | Qt.WindowStaysOnTopHint)
 
         if self.leFileName.text() != '':
             fDialog.selectFile(self.leFileName.text())
