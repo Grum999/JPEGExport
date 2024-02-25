@@ -117,11 +117,10 @@ class JEMainWindow(EDialog):
 
         if self.__doc is None:
             # no document opened: cancel plugin
-            QMessageBox.warning(
-                    QWidget(),
-                    f"{jeName}",
-                    i18n("There's no active document: <i>JPEG Export</i> plugin only works with opened documents")
-                )
+            QMessageBox.warning(QWidget(),
+                                f"{jeName}",
+                                i18n("There's no active document: <i>JPEG Export</i> plugin only works with opened documents")
+                                )
             self.close()
             return
 
@@ -270,6 +269,15 @@ class JEMainWindow(EDialog):
         self.sbResizedMaxWidth.setValue(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH))
         self.sbResizedMaxHeight.setValue(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT))
         self.wResizeOptions.setEnabled(self.cbResizeDocument.isChecked())
+
+        # window geometry
+        sizeW = JESettings.get(JESettingsKey.CONFIG_WINDOW_GEOMETRY_SIZE_WIDTH)
+        sizeH = JESettings.get(JESettingsKey.CONFIG_WINDOW_GEOMETRY_SIZE_HEIGHT)
+        positionX = JESettings.get(JESettingsKey.CONFIG_WINDOW_GEOMETRY_POSITION_X)
+        positionY = JESettings.get(JESettingsKey.CONFIG_WINDOW_GEOMETRY_POSITION_Y)
+        # geometry is taken in account only if size > 0 (otherwise, mean that value weren't initialized)
+        if sizeH > 0 and sizeW > 0:
+            self.setGeometry(positionX, positionY, sizeW, sizeH)
 
         # signals
         self.cbCropToSelection.toggled.connect(lambda x: self.__updateDoc(JEMainWindow.__UPDATE_MODE_CROP))
@@ -548,7 +556,14 @@ class JEMainWindow(EDialog):
         # save export preferences
         options = self.wJpegOptions.options()
 
+        rect = self.geometry()
+
         JESettings.set(JESettingsKey.CONFIG_FILE_LASTPATH, os.path.dirname(self.leFileName.text()))
+
+        JESettings.set(JESettingsKey.CONFIG_WINDOW_GEOMETRY_SIZE_WIDTH, rect.width())
+        JESettings.set(JESettingsKey.CONFIG_WINDOW_GEOMETRY_SIZE_HEIGHT, rect.height())
+        JESettings.set(JESettingsKey.CONFIG_WINDOW_GEOMETRY_POSITION_X, rect.x())
+        JESettings.set(JESettingsKey.CONFIG_WINDOW_GEOMETRY_POSITION_Y, rect.y())
 
         JESettings.set(JESettingsKey.CONFIG_JPEG_QUALITY, options['quality'])
         JESettings.set(JESettingsKey.CONFIG_JPEG_SMOOTHING, options['smoothing'])

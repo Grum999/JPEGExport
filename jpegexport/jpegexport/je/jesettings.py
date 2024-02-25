@@ -85,6 +85,11 @@ class JESettingsValues(object):
 class JESettingsKey(SettingsKey):
     CONFIG_FILE_LASTPATH =                                  'config.file.lastPath'
 
+    CONFIG_WINDOW_GEOMETRY_SIZE_WIDTH =                     'config.window.geometry.size.width'
+    CONFIG_WINDOW_GEOMETRY_SIZE_HEIGHT =                    'config.window.geometry.size.height'
+    CONFIG_WINDOW_GEOMETRY_POSITION_X =                     'config.window.geometry.position.x'
+    CONFIG_WINDOW_GEOMETRY_POSITION_Y =                     'config.window.geometry.position.y'
+
     CONFIG_JPEG_QUALITY =                                   'config.jpeg.quality'
     CONFIG_JPEG_SMOOTHING =                                 'config.jpeg.smoothing'
     CONFIG_JPEG_SUBSAMPLING =                               'config.jpeg.subsampling'
@@ -118,6 +123,11 @@ class JESettings(Settings):
         rules = [
             SettingsRule(JESettingsKey.CONFIG_FILE_LASTPATH,                                os.path.normpath(QStandardPaths.writableLocation(QStandardPaths.HomeLocation)),
                                                                                                                                 SettingsFmt(str)),
+
+            SettingsRule(JESettingsKey.CONFIG_WINDOW_GEOMETRY_SIZE_WIDTH,                   0, SettingsFmt(int)),
+            SettingsRule(JESettingsKey.CONFIG_WINDOW_GEOMETRY_SIZE_HEIGHT,                  0, SettingsFmt(int)),
+            SettingsRule(JESettingsKey.CONFIG_WINDOW_GEOMETRY_POSITION_X,                   0, SettingsFmt(int)),
+            SettingsRule(JESettingsKey.CONFIG_WINDOW_GEOMETRY_POSITION_Y,                   0, SettingsFmt(int)),
 
             SettingsRule(JESettingsKey.CONFIG_JPEG_QUALITY,                                 85,                                 SettingsFmt(int, (0, 100))),
             SettingsRule(JESettingsKey.CONFIG_JPEG_SMOOTHING,                               15,                                 SettingsFmt(int, (0, 100))),
