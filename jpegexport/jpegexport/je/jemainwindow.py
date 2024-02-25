@@ -41,8 +41,8 @@ from .jesettings import (
         JESettingsValues
     )
 
-from jpegexport.pktk.modules.about import AboutWindow
-from jpegexport.pktk.modules.edialog import EDialog
+from jpegexport.pktk.widgets.wabout import WAboutWindow
+from jpegexport.pktk.widgets.wedialog import WEDialog
 from jpegexport.pktk.modules.strutils import bytesSizeToStr
 from jpegexport.pktk.modules.imgutils import imgBoxSize
 from jpegexport.pktk.modules.timeutils import Timer
@@ -56,7 +56,7 @@ from jpegexport.pktk.modules.ekrita import (
 
 
 # -----------------------------------------------------------------------------
-class JEMainWindow(EDialog):
+class JEMainWindow(WEDialog):
     """Main JpegExport window"""
 
     # A flag to ensure that class is instancied only once
@@ -598,7 +598,7 @@ class JEMainWindow(EDialog):
 
     def __displayAbout(self):
         # display about window
-        AboutWindow(self.__jeName, self.__jeVersion, os.path.join(os.path.dirname(__file__), 'resources', 'png', 'buli-powered-big.png'), None, ':JPEG Export')
+        WAboutWindow(self.__jeName, self.__jeVersion, os.path.join(os.path.dirname(__file__), 'resources', 'png', 'buli-powered-big.png'), None, ':JPEG Export')
 
     def __closeDocPreview(self, deleteTmpFile=False):
         """Close the temporary document preview"""

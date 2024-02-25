@@ -47,7 +47,7 @@ class WAboutWindow(WEDialog):
     ̀ version`:     plugin version
     ̀ image`:       a QImage or a complete path/filename to image to use
     ̀ license`:     text to display for license; if None, default GPL3 license is added
-    ̀ sourceCode`:  text to display for source code; if None, none idpslayed; if ':xxxx', links to github Grum999/XXXX repo :-)
+    ̀ sourceCode`:  text to display for source code; if None, none is displayed; if ':xxxx', links to github Grum999/XXXX repo :-)
     `madeWidth`:   text to display for 'made with'
 
     Expected image size: 900x574
@@ -57,7 +57,7 @@ class WAboutWindow(WEDialog):
         super(WAboutWindow, self).__init__(os.path.join(os.path.dirname(__file__), '..', 'resources', 'wabout.ui'), parent)
 
         self.setWindowTitle(i18n(f'{name}::About'))
-        self.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint)
+        self.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint | Qt.WindowStaysOnTopHint)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowMinMaxButtonsHint)
         self.lblName.setText(name)
         self.lblVersion.setText(f'v{version}')
