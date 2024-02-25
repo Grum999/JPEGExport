@@ -1,4 +1,4 @@
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # JPEG Export
 # Copyright (C) 2020 - Grum999
 # -----------------------------------------------------------------------------
@@ -38,7 +38,7 @@ from PyQt5.QtCore import (
     )
 
 if __name__ != '__main__':
-     # script is executed from Krita, loaded as a module
+    # script is executed from Krita, loaded as a module
     __PLUGIN_EXEC_FROM__ = 'KRITA'
 
     from .pktk.pktk import (
@@ -78,7 +78,7 @@ else:
 
 
 EXTENSION_ID = 'pykrita_jpegexport'
-PLUGIN_VERSION = '1.2.1'
+PLUGIN_VERSION = '1.3.0'
 PLUGIN_MENU_ENTRY = 'JPEG Export'
 
 REQUIRED_KRITA_VERSION = (5, 2, 0)
@@ -162,7 +162,7 @@ class JpegExport(Extension):
 
 
     def createActions(self, window):
-        if checkKritaVersion(5,0,0):
+        if checkKritaVersion(5, 0, 0):
             self.__action = window.createAction(EXTENSION_ID, f'{PLUGIN_MENU_ENTRY}...', "file")
         else:
             self.__action = window.createAction(EXTENSION_ID, f'{PLUGIN_MENU_ENTRY}...', "tools/scripts")
@@ -174,8 +174,8 @@ class JpegExport(Extension):
         # Create dialog box
         if not self.__isKritaVersionOk:
             QMessageBox.information(QWidget(),
-                                      PLUGIN_MENU_ENTRY,
-                                      "At least, Krita version {0} is required to use plugin...".format('.'.join([str(v) for v in REQUIRED_KRITA_VERSION]))
+                                    PLUGIN_MENU_ENTRY,
+                                    "At least, Krita version {0} is required to use plugin...".format('.'.join([str(v) for v in REQUIRED_KRITA_VERSION]))
                                     )
             return
 
