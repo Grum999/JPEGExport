@@ -68,7 +68,7 @@ class SetupManagerBase(QObject):
         self.__emitUpdated = 0
         self.__position = 999999
         self.__node = None
-        self.__iconUri = 'pktk:brush_tune'
+        self.__iconUri = 'pktk:tune'
         self.__icon = buildIcon(self.__iconUri)
         self.__name = ''
         self.__comments = ''
@@ -179,11 +179,11 @@ class SetupManagerBase(QObject):
             self.updated.emit(self, property)
 
     def beginUpdateCreated(self):
-        """Start updating massivelly and then do not emit update"""
+        """Start updating massively and then do not emit update"""
         self.__emitUpdated += 1
 
     def endUpdateCreated(self):
-        """Stop updating massivelly and then emit update"""
+        """Stop updating massively and then emit update"""
         self.__emitUpdated -= 1
         if self.__emitUpdated < 0:
             self.__emitUpdated = 0
@@ -1971,7 +1971,7 @@ class WSetupManager(QWidget):
     # something has changed (group, setups, creation/deletion/update/move)
     setupsModified = Signal()
 
-    # new setup intialized
+    # new setup initialised
     setupFileNew = Signal()
     # setup file opened
     setupFileOpened = Signal(str)
@@ -2007,6 +2007,12 @@ class WSetupManager(QWidget):
         uiFileName = os.path.join(os.path.dirname(__file__), '..', 'resources', 'wsetupmanager.ui')
 
         loadXmlUi(uiFileName, self)
+
+        # default icons
+        self.__defaultIcons = {'icon': 'pktk:tune',
+                               'folderOpen': 'pktk:folder_open',
+                               'folderClose': 'pktk:folder_close'
+                               }
 
         # model to use to manipulate data
         self.__model = SetupManagerModel()
@@ -2207,6 +2213,7 @@ class WSetupManager(QWidget):
         self.__propertiesEditorOptions[SetupManagerPropertyEditor.OPTION_SETUP_ACTIVE_SETUP] = None
         self.__propertiesEditorOptions[SetupManagerPropertyEditor.OPTION_SETUP_PREVIEW_WIDGET] = self.__widgetSetup()
         newGroup = SetupManagerGroup()
+        newGroup.setIconUri(self.__defaultIcons['folderOpen'], self.__defaultIcons['folderClose'])
 
         self.setupPropertiesEditorOpen.emit(newGroup)
         returned = SetupManagerPropertyEditor.edit(newGroup, self.__propertiesEditorOptions)
@@ -2237,6 +2244,7 @@ class WSetupManager(QWidget):
         self.__propertiesEditorOptions[SetupManagerPropertyEditor.OPTION_SETUP_ACTIVE_SETUP] = None
         self.__propertiesEditorOptions[SetupManagerPropertyEditor.OPTION_SETUP_PREVIEW_WIDGET] = self.__widgetSetup()
         newSetup = SetupManagerSetup()
+        newSetup.setIconUri(self.__defaultIcons['icon'])
         newSetup.setData(self.__currentSetupData)
 
         self.setupPropertiesEditorOpen.emit(newSetup)
@@ -2552,17 +2560,6 @@ class WSetupManager(QWidget):
 
     def propertiesEditorIconSelectorIconSizeIndex(self):
         """Return current icon size index for properties editor icon selector dialog box"""
-        return self.__propertiesEditorOptions[SetupManagerPropertyEditor.OPTION_TITLE]
-
-    def setPropertiesEditorIconSelectorIconSizeIndex(self, title):
-        """Set current icon size index for properties editor icon selector dialog box"""
-        if not isinstance(title, str):
-            raise EInvalidType("Given `title' must be a <str>")
-
-        self.__propertiesEditorOptions[SetupManagerPropertyEditor.OPTION_TITLE] = title
-
-    def propertiesEditorIconSelectorIconSizeIndex(self):
-        """Return current icon size index for properties editor icon selector dialog box"""
         return self.__propertiesEditorOptions[SetupManagerPropertyEditor.OPTION_ICON_DLGBOX_SELECTION_INDEXSIZE]
 
     def setPropertiesEditorIconSelectorIconSizeIndex(self, indexSize):
@@ -2582,6 +2579,22 @@ class WSetupManager(QWidget):
             raise EInvalidValue("Given `viewMode' must be QListView.IconMode or QListView.ListMode")
 
         self.__propertiesEditorOptions[SetupManagerPropertyEditor.OPTION_ICON_DLGBOX_SELECTION_VIEWMODE] = viewMode
+
+    def setIconUri(self, item=None, folderOpen=None, folderClose=None):
+        """Define icons for setup & groups
+
+        If not None, given `item` define icon uri for setting item
+        If not None, given `open` define icon uri for folder open
+        If not None, given `close` define icon uri for folder close
+        """
+        if item is not None:
+            self.__defaultIcons['icon'] = item
+
+        if folderOpen is not None:
+            self.__defaultIcons['folderOpen'] = folderOpen
+
+        if folderClose is not None:
+            self.__defaultIcons['folderClose'] = folderClose
 
     def lastFileName(self):
         """Return file name of last opened/saved setup file"""
@@ -2696,23 +2709,24 @@ class SetupManagerPropertyEditor(WEDialog):
 
         self.__item = item
         self.__uriIcon = None
+        self.__options = options
 
         # tab properties active by default
         self.tabWidget.setCurrentIndex(0)
         self.tabWidget.setTabBarAutoHide(True)
 
         if isinstance(self.__item, SetupManagerSetup) and isinstance(self.__item.data(), dict):
-            if SetupManagerPropertyEditor.OPTION_SETUP_PREVIEW_WIDGET in options and isinstance(options[SetupManagerPropertyEditor.OPTION_SETUP_PREVIEW_WIDGET], QWidget):
-                options[SetupManagerPropertyEditor.OPTION_SETUP_PREVIEW_WIDGET].setData(self.__item.data())
-                self.tabWidget.addTab(options[SetupManagerPropertyEditor.OPTION_SETUP_PREVIEW_WIDGET], i18n('Setup preview'))
+            if SetupManagerPropertyEditor.OPTION_SETUP_PREVIEW_WIDGET in self.__options and isinstance(self.__options[SetupManagerPropertyEditor.OPTION_SETUP_PREVIEW_WIDGET], QWidget):
+                self.__options[SetupManagerPropertyEditor.OPTION_SETUP_PREVIEW_WIDGET].setData(self.__item.data())
+                self.tabWidget.addTab(self.__options[SetupManagerPropertyEditor.OPTION_SETUP_PREVIEW_WIDGET], i18n('Setup preview'))
 
             hideRefreshSetup = True
-            if SetupManagerPropertyEditor.OPTION_SETUP_ACTIVE_SETUP in options:
-                if options[SetupManagerPropertyEditor.OPTION_SETUP_ACTIVE_SETUP] is not None:
+            if SetupManagerPropertyEditor.OPTION_SETUP_ACTIVE_SETUP in self.__options:
+                if self.__options[SetupManagerPropertyEditor.OPTION_SETUP_ACTIVE_SETUP] is not None:
                     # need to compare both setup, if are the same or not
                     # - convert both to json
                     # - compare
-                    jsonStrActiveSetup = json.dumps(options[SetupManagerPropertyEditor.OPTION_SETUP_ACTIVE_SETUP], cls=JsonQObjectEncoder)
+                    jsonStrActiveSetup = json.dumps(self.__options[SetupManagerPropertyEditor.OPTION_SETUP_ACTIVE_SETUP], cls=JsonQObjectEncoder)
                     jsonStrSetup = json.dumps(self.__item.data(), cls=JsonQObjectEncoder)
                     hideRefreshSetup = (jsonStrActiveSetup == jsonStrSetup)
 
@@ -2745,13 +2759,13 @@ class SetupManagerPropertyEditor(WEDialog):
 
         self.wtComments.setHtml(self.__item.comments())
 
-        if SetupManagerPropertyEditor.OPTION_COMMENT_TOOLBARLAYOUT in options and isinstance(options[SetupManagerPropertyEditor.OPTION_COMMENT_TOOLBARLAYOUT], int):
-            self.wtComments.setToolbarButtons(options[SetupManagerPropertyEditor.OPTION_COMMENT_TOOLBARLAYOUT])
+        if SetupManagerPropertyEditor.OPTION_COMMENT_TOOLBARLAYOUT in self.__options and isinstance(self.__options[SetupManagerPropertyEditor.OPTION_COMMENT_TOOLBARLAYOUT], int):
+            self.wtComments.setToolbarButtons(self.__options[SetupManagerPropertyEditor.OPTION_COMMENT_TOOLBARLAYOUT])
         else:
             self.wtComments.setToolbarButtons(WTextEdit.DEFAULT_TOOLBAR | WTextEditBtBarOption.STYLE_STRIKETHROUGH | WTextEditBtBarOption.STYLE_COLOR_BG)
 
-        if SetupManagerPropertyEditor.OPTION_COMMENT_COLORPICKERLAYOUT in options and isinstance(options[SetupManagerPropertyEditor.OPTION_COMMENT_COLORPICKERLAYOUT], list):
-            self.wtComments.setColorPickerLayout(options[SetupManagerPropertyEditor.OPTION_COMMENT_COLORPICKERLAYOUT])
+        if SetupManagerPropertyEditor.OPTION_COMMENT_COLORPICKERLAYOUT in self.__options and isinstance(self.__options[SetupManagerPropertyEditor.OPTION_COMMENT_COLORPICKERLAYOUT], list):
+            self.wtComments.setColorPickerLayout(self.__options[SetupManagerPropertyEditor.OPTION_COMMENT_COLORPICKERLAYOUT])
 
         self.pbOk.clicked.connect(self.accept)
         self.pbCancel.clicked.connect(self.reject)
@@ -2759,7 +2773,7 @@ class SetupManagerPropertyEditor(WEDialog):
         self.__setOkEnabled()
         self.setModal(True)
         self.setWindowTitle(title)
-        self.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint)
+        self.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint | Qt.WindowStaysOnTopHint)
 
     def __buildIconPopupMenu(self):
         """Build popup menu for icon button"""
@@ -2823,6 +2837,8 @@ class SetupManagerPropertyEditor(WEDialog):
         self.lblRefreshSetup2.hide()
         self.tbRefreshSetup.hide()
         self.setUpdatesEnabled(True)
+        self.__options[SetupManagerPropertyEditor.OPTION_SETUP_PREVIEW_WIDGET].setData(self.__options[SetupManagerPropertyEditor.OPTION_SETUP_ACTIVE_SETUP])
+        self.__item.setData(self.__options[SetupManagerPropertyEditor.OPTION_SETUP_ACTIVE_SETUP])
 
     def properties(self):
         """Return options from setup editor"""
