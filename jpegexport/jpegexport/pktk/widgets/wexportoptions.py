@@ -29,7 +29,6 @@
 
 import PyQt5.uic
 
-import os
 import sys
 
 from krita import InfoObject
@@ -47,7 +46,6 @@ from PyQt5.QtWidgets import (
 
 from ..modules.utils import loadXmlUi
 from .wcolorselector import WColorPicker
-from .wcolorbutton import WColorButton
 from ..pktk import *
 
 
