@@ -7,7 +7,7 @@
 Window size has been reduced to let it open on smaller screens. 
 Then, to be able to put all options (and taking in account new one), the user interface has been reviewed. 
 
-![Main interface](https://github.com/Grum999/JPEGExport/raw/main/screenshots/r1-3-0_mainwindow.jpeg)
+![Main interface](./../screenshots/r1-3-0_mainwindow.jpeg)
 
 | Reference | Description                                                |
 |-----------|------------------------------------------------------------|
@@ -21,7 +21,7 @@ Then, to be able to put all options (and taking in account new one), the user in
 
 Options to define target document path allows to quickly define default path where document will be saved
 
-![Main interface](https://github.com/Grum999/JPEGExport/raw/main/screenshots/r1-3-0_mainwindow_targetDocument.jpeg)
+![Main interface](./../screenshots/r1-3-0_mainwindow_targetDocument.jpeg)
 
 | Target path                   | Description                                                                                   |
 |-------------------------------|-----------------------------------------------------------------------------------------------|
@@ -39,7 +39,7 @@ Options to define target document path allows to quickly define default path whe
 
 The *Settings manager* let the possibility to manage different export options according to final use of JPEG file.
 
-![Main interface](https://github.com/Grum999/JPEGExport/raw/main/screenshots/r1-3-0_mainwindow_settingsManager.jpeg)
+![Main interface](./../screenshots/r1-3-0_mainwindow_settingsManager.jpeg)
 
 | Reference | Description                                                                                                                                                                                                           |
 |-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -54,11 +54,11 @@ Editing a settings in pool allow to define:
 - Icon
 - Description
 
-![Main interface](https://github.com/Grum999/JPEGExport/raw/main/screenshots/r1-3-0_mainwindow_settingsManager_edit1.jpeg)
+![Main interface](./../screenshots/r1-3-0_mainwindow_settingsManager_edit1.jpeg)
 
 Export setup properties for settings are visible in *Setup preview*  
 
-![Main interface](https://github.com/Grum999/JPEGExport/raw/main/screenshots/r1-3-0_mainwindow_settingsManager_edit2.jpeg)
+![Main interface](./../screenshots/r1-3-0_mainwindow_settingsManager_edit2.jpeg)
 
 [Feature #4](https://github.com/Grum999/JPEGExport/issues/4)
 
