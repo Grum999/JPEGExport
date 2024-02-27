@@ -1665,9 +1665,6 @@ class WDialogFile(QFileDialog):
     def __init__(self, caption=None, directory=None, filter=None, options=None):
         super(WDialogFile, self).__init__(None, caption, directory, filter)
 
-        self.__originalDlgBoxLayout = self.layout()
-
-        self.setOption(QFileDialog.DontUseNativeDialog, True)
         self.setMaximumSize(0xffffff, 0xffffff)
         self.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint | Qt.WindowStaysOnTopHint)
 
@@ -1730,11 +1727,15 @@ class WDialogFile(QFileDialog):
         # --------------------------------------
         # start to reorganize file dialog layout
         # --------------------------------------
+        # need to use Qt file dialog
+        self.setOption(QFileDialog.DontUseNativeDialog, True)
+        self.__originalDlgBoxLayout = self.layout()
 
         # add preview if needed
         if self.__options[WDialogFile.OPTION_PREVIEW_WIDGET] is not None:
             self.__newDlgBoxWidget = QWidget()
-            self.__newDlgBoxWidget.setLayout(self.__originalDlgBoxLayout)
+            if self.__originalDlgBoxLayout:
+                self.__newDlgBoxWidget.setLayout(self.__originalDlgBoxLayout)
 
             self.__newDlgBoxLayout = QVBoxLayout()
             self.__newDlgBoxLayout.setContentsMargins(0, 0, 0, 0)
@@ -1844,7 +1845,10 @@ class WDialogFile(QFileDialog):
             # calculate QDialog size according to content
             self.adjustSize()
 
-        self.resize(self.width() + self.__options[WDialogFile.OPTION_PREVIEW_WIDTH], self.height())
+        screen = self.window().windowHandle().screen()
+        newSizeW = min(self.width() + self.__options[WDialogFile.OPTION_PREVIEW_WIDTH], screen.size().width() - 20)
+        newSizeH = min(self.height(), screen.size().height() - 20)
+        self.resize(newSizeW, newSizeH)
 
     def __applyMessageIdealSize(self, message):
         """Try to calculate and apply ideal size for dialog box"""
