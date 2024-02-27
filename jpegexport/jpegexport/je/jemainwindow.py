@@ -32,6 +32,7 @@ from PyQt5.QtWidgets import (
         QWidget
     )
 
+from .wjepathoptions import WJEPathOptions
 from .jesettings import (
         JESettings,
         JESettingsKey,
@@ -57,13 +58,13 @@ from jpegexport.pktk.modules.ekrita import (
 from jpegexport.pktk import *
 
 # -----------------------------------------------------------------------------
-class JEViewer(QWidget):
+class WJEViewer(QWidget):
     """A basic QWidget used to display setups"""
 
     def __init__(self, parent=None):
-        super(JEViewer, self).__init__(parent)
+        super(WJEViewer, self).__init__(parent)
 
-        uiFileName = os.path.join(os.path.dirname(__file__), 'resources', 'jesettingsviewer.ui')
+        uiFileName = os.path.join(os.path.dirname(__file__), 'resources', 'wjesettingsviewer.ui')
 
         # temporary add <plugin> path to sys.path to let 'xxx.widgets.xxx' being accessible during xmlLoad()
         # because of WColorButton path that must be absolut in UI file
@@ -96,13 +97,18 @@ class JEViewer(QWidget):
                 JESettingsKey.CONFIG_MISC_RESIZE_UNIT: data[JESettingsKey.CONFIG_MISC_RESIZE_UNIT.id()]
                 })
 
+        self.wPathOptions.setProperties({
+                JESettingsKey.CONFIG_PATH_TGTMODE: data[JESettingsKey.CONFIG_PATH_TGTMODE.id()],
+                JESettingsKey.CONFIG_PATH_USRPATH: data[JESettingsKey.CONFIG_PATH_USRPATH.id()]
+            })
 
 # -----------------------------------------------------------------------------
 class JEMainWindow(WEDialog):
     """Main JpegExport window"""
 
-    PAGE_OPTCONTENT = 0
-    PAGE_JPEGEXPORT = 1
+    PAGE_TGTPATH = 0
+    PAGE_OPTCONTENT = 1
+    PAGE_JPEGEXPORT = 2
 
     # A flag to ensure that class is instancied only once
     __IS_OPENED = False
@@ -153,6 +159,8 @@ class JEMainWindow(WEDialog):
         self.__pgOptContent.setData(Qt.UserRole, JEMainWindow.PAGE_OPTCONTENT)
         self.__pgOptJpegExport = QListWidgetItem(buildIcon("pktk:tune_img_slider"), i18n("JPEG Options"))
         self.__pgOptJpegExport.setData(Qt.UserRole, JEMainWindow.PAGE_JPEGEXPORT)
+        self.__pgOptTgtPath = QListWidgetItem(buildIcon("pktk:folder_tune"), i18n("Target document"))
+        self.__pgOptTgtPath.setData(Qt.UserRole, JEMainWindow.PAGE_TGTPATH)
 
         if self.__doc is None:
             # no document opened: cancel plugin
@@ -257,13 +265,10 @@ class JEMainWindow(WEDialog):
                 JESettingsKey.CONFIG_MISC_RESIZE_UNIT: JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_UNIT)
                 })
 
-        newFileName = self.__doc.fileName()
-        if newFileName == '':
-            newFileName = os.path.join(JESettings.get(JESettingsKey.CONFIG_FILE_LASTPATH), 'newDocument.jpeg')
-        else:
-            newFileName = re.sub(r'\.[^.]+$', '.jpeg', newFileName)
-
-        self.leFileName.setText(newFileName)
+        self.wPathOptions.setProperties({
+                JESettingsKey.CONFIG_PATH_TGTMODE: JESettings.get(JESettingsKey.CONFIG_PATH_TGTMODE),
+                JESettingsKey.CONFIG_PATH_USRPATH: JESettings.get(JESettingsKey.CONFIG_PATH_USRPATH)
+                })
 
         renderMode = JESettings.get(JESettingsKey.CONFIG_RENDER_MODE)
         if renderMode == JESettingsValues.RENDER_MODE_FINAL:
@@ -286,7 +291,7 @@ class JEMainWindow(WEDialog):
 
         # setup manager
         self.wsmSetups.setupApplied.connect(self.__applySetupFromManager)
-        self.wsmSetups.setPropertiesEditorSetupPreviewWidgetClass(JEViewer)
+        self.wsmSetups.setPropertiesEditorSetupPreviewWidgetClass(WJEViewer)
         self.wsmSetups.setExtensionFilter(f"{i18n('JPEG Export Setups')} (*.jesetups)")
         self.wsmSetups.setStoredDataFormat('je--export_setup', '1.0.0')
         self.wsmSetups.setIconSizeIndex(JESettings.get(JESettingsKey.CONFIG_SETUPMANAGER_ZOOMLEVEL))
@@ -306,6 +311,7 @@ class JEMainWindow(WEDialog):
         self.wsmSetups.setIconUri('pktk:tune_img_slider')
 
         # pages
+        self.lvPages.addItem(self.__pgOptTgtPath)
         self.lvPages.addItem(self.__pgOptContent)
         self.lvPages.addItem(self.__pgOptJpegExport)
 
@@ -328,7 +334,11 @@ class JEMainWindow(WEDialog):
         self.tbSaveAs.clicked.connect(self.__saveFileName)
         self.leFileName.mouseDoubleClickEvent = lambda x: self.__saveFileName()
 
-        self.__setPage(JEMainWindow.PAGE_OPTCONTENT)
+        self.wPathOptions.pathUpdated.connect(self.__updateFileName)
+
+        self.__setPage(JESettings.get(JESettingsKey.CONFIG_OPT_INDEX))
+
+        self.__updateFileName()
 
     def __pageChanged(self):
         """Set page according to option"""
@@ -363,6 +373,11 @@ class JEMainWindow(WEDialog):
                 JESettingsKey.CONFIG_MISC_RESIZE_UNIT: data[JESettingsKey.CONFIG_MISC_RESIZE_UNIT.id()]
                 })
 
+        self.wPathOptions.setProperties({
+                JESettingsKey.CONFIG_PATH_TGTMODE: data[JESettingsKey.CONFIG_PATH_TGTMODE.id()],
+                JESettingsKey.CONFIG_PATH_USRPATH: data[JESettingsKey.CONFIG_PATH_USRPATH.id()]
+                })
+
     def __setupData(self):
         """Return a dict with current setup data"""
         jpegOptions = self.wJpegOptions.options()
@@ -381,7 +396,9 @@ class JEMainWindow(WEDialog):
                     JESettingsKey.CONFIG_MISC_RESIZE_FILTER.id(): self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_FILTER),
                     JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE.id(): self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE),
                     JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH.id(): self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH),
-                    JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT.id(): self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT)
+                    JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT.id(): self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT),
+                    JESettingsKey.CONFIG_PATH_TGTMODE.id(): self.wPathOptions.property(JESettingsKey.CONFIG_PATH_TGTMODE),
+                    JESettingsKey.CONFIG_PATH_USRPATH.id(): self.wPathOptions.property(JESettingsKey.CONFIG_PATH_USRPATH)
                     }
 
         if self.rbRenderNormal.isChecked():
@@ -394,6 +411,46 @@ class JEMainWindow(WEDialog):
             returned[JESettingsKey.CONFIG_RENDER_MODE.id()] = JESettingsValues.RENDER_MODE_SOURCE
 
         return returned
+
+    def __updateFileName(self):
+        """Update current file path/filename, taking PATH option"""
+        srcFileName = self.__doc.fileName()
+
+        currentBaseName, ext = os.path.splitext(os.path.basename(self.leFileName.text()))
+
+        pathName = os.path.dirname(srcFileName)
+        baseName, ext = os.path.splitext(os.path.basename(srcFileName))
+
+        pathMode = self.wPathOptions.property(JESettingsKey.CONFIG_PATH_TGTMODE)
+
+        if pathMode == WJEPathOptions.MODE_SRC:
+            if pathName == '' or pathName is None:
+                # if source file is not saved (no file name) then use last path
+                pathMode = WJEPathOptions.MODE_LST
+
+        if pathMode == WJEPathOptions.MODE_LST:
+            pathName = JESettings.get(JESettingsKey.CONFIG_FILE_LASTPATH)
+            if pathName == '' or pathName is None:
+                # if last path name is not defined, then use 'user path'
+                pathMode = WJEPathOptions.MODE_USR
+
+        if pathMode == WJEPathOptions.MODE_USR:
+            pathName = self.wPathOptions.property(JESettingsKey.CONFIG_PATH_USRPATH)
+            if pathName == '' or pathName is None:
+                # if user path is not defined, then use 'user home'
+                pathName = os.path.expanduser('~')
+
+        if currentBaseName != '':
+            baseName = currentBaseName
+
+        if baseName == '':
+            baseName = 'newDocument.jpeg'
+        else:
+            baseName = f'{baseName}.jpeg'
+
+        newFileName = os.path.join(pathName, baseName)
+
+        self.leFileName.setText(newFileName)
 
     def __calculateBounds(self):
         """calculate bounds from source document
@@ -672,7 +729,6 @@ class JEMainWindow(WEDialog):
 
         JESettings.set(JESettingsKey.CONFIG_MISC_CROP_ACTIVE, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_CROP_ACTIVE))
         JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE))
-
         JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_UNIT, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_UNIT))
         JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_FILTER, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_FILTER))
         JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE))
@@ -685,6 +741,9 @@ class JEMainWindow(WEDialog):
         JESettings.set(JESettingsKey.CONFIG_SETUPMANAGER_COLUMNWIDTH, self.wsmSetups.columnSetupWidth())
         JESettings.set(JESettingsKey.CONFIG_SETUPMANAGER_PROPERTIES_DLGBOX_ICON_VIEWMODE, self.wsmSetups.propertiesEditorIconSelectorViewMode())
         JESettings.set(JESettingsKey.CONFIG_SETUPMANAGER_PROPERTIES_DLGBOX_ICON_ZOOMLEVEL, self.wsmSetups.propertiesEditorIconSelectorIconSizeIndex())
+
+        JESettings.set(JESettingsKey.CONFIG_PATH_TGTMODE, self.wPathOptions.property(JESettingsKey.CONFIG_PATH_TGTMODE))
+        JESettings.set(JESettingsKey.CONFIG_PATH_USRPATH, self.wPathOptions.property(JESettingsKey.CONFIG_PATH_USRPATH))
 
         JESettings.save()
 

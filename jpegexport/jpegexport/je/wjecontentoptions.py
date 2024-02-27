@@ -60,7 +60,7 @@ class WJEContentOptions(QWidget):
     def __init__(self, parent=None):
         super(WJEContentOptions, self).__init__(parent)
 
-        uiFileName = os.path.join(os.path.dirname(__file__), 'resources', 'jecontentoptions.ui')
+        uiFileName = os.path.join(os.path.dirname(__file__), 'resources', 'wjecontentoptions.ui')
 
         # temporary add <plugin> path to sys.path to let 'pktk.widgets.xxx' being accessible during xmlLoad()
         # because of WColorButton path that must be absolut in UI file

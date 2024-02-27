@@ -102,15 +102,15 @@ class JESettingsKey(SettingsKey):
     CONFIG_SETUPMANAGER_COLORPICKER_CSLIDER_HSV_VISIBLE =   'config.setupManager.colorPicker.colorSlider.hsv.visible'
     CONFIG_SETUPMANAGER_COLORPICKER_CSLIDER_HSV_ASPCT =     'config.setupManager.colorPicker.colorSlider.hsv.asPct'
 
-    CONFIG_JPEG_QUALITY =                                   'config.jpeg.quality'
-    CONFIG_JPEG_SMOOTHING =                                 'config.jpeg.smoothing'
-    CONFIG_JPEG_SUBSAMPLING =                               'config.jpeg.subsampling'
-    CONFIG_JPEG_PROGRESSIVE =                               'config.jpeg.progressive'
-    CONFIG_JPEG_OPTIMIZE =                                  'config.jpeg.optimize'
-    CONFIG_JPEG_SAVEPROFILE =                               'config.jpeg.saveProfile'
-    CONFIG_JPEG_TRANSPFILLCOLOR =                           'config.jpeg.transparencyFillcolor'
-
     CONFIG_RENDER_MODE =                                    'config.render.mode'
+
+    CONFIG_JPEG_QUALITY =                                   'config.options.jpeg.quality'
+    CONFIG_JPEG_SMOOTHING =                                 'config.options.jpeg.smoothing'
+    CONFIG_JPEG_SUBSAMPLING =                               'config.options.jpeg.subsampling'
+    CONFIG_JPEG_PROGRESSIVE =                               'config.options.jpeg.progressive'
+    CONFIG_JPEG_OPTIMIZE =                                  'config.options.jpeg.optimize'
+    CONFIG_JPEG_SAVEPROFILE =                               'config.options.jpeg.saveProfile'
+    CONFIG_JPEG_TRANSPFILLCOLOR =                           'config.options.jpeg.transparencyFillcolor'
 
     CONFIG_MISC_CROP_ACTIVE =                               'config.options.crop.active'
     CONFIG_MISC_RESIZE_ACTIVE =                             'config.options.resize.active'
@@ -120,6 +120,10 @@ class JESettingsKey(SettingsKey):
     CONFIG_MISC_RESIZE_PX_HEIGHT =                          'config.options.resize.px.height'
     CONFIG_MISC_RESIZE_FILTER =                             'config.options.resize.filter'
 
+    CONFIG_PATH_TGTMODE =                                   'config.options.path.tgtMode'
+    CONFIG_PATH_USRPATH =                                   'config.options.path.userPath'
+
+    CONFIG_OPT_INDEX =                                      'config.options.pageIndex'
 
 class JESettings(Settings):
     """Manage JPEG Export settings (keep in memory last preferences used for export)
@@ -131,6 +135,7 @@ class JESettings(Settings):
         """Initialise settings"""
         if pluginId is None or pluginId == '':
             pluginId = 'jpegexport'
+
 
         rules = [
             SettingsRule(JESettingsKey.CONFIG_FILE_LASTPATH,                                os.path.normpath(QStandardPaths.writableLocation(QStandardPaths.HomeLocation)),
@@ -169,6 +174,8 @@ class JESettings(Settings):
             SettingsRule(JESettingsKey.CONFIG_SETUPMANAGER_COLORPICKER_CSLIDER_HSV_VISIBLE,  False,     SettingsFmt(bool)),
             SettingsRule(JESettingsKey.CONFIG_SETUPMANAGER_COLORPICKER_CSLIDER_HSV_ASPCT,    False,     SettingsFmt(bool)),
 
+            SettingsRule(JESettingsKey.CONFIG_OPT_INDEX,                                    0,                                  SettingsFmt(int, [0, 1, 2])),
+
             SettingsRule(JESettingsKey.CONFIG_JPEG_QUALITY,                                 85,                                 SettingsFmt(int, (0, 100))),
             SettingsRule(JESettingsKey.CONFIG_JPEG_SMOOTHING,                               15,                                 SettingsFmt(int, (0, 100))),
             SettingsRule(JESettingsKey.CONFIG_JPEG_SUBSAMPLING,                             JESettingsValues.JPEG_SUBSAMPLING_444,
@@ -180,6 +187,9 @@ class JESettings(Settings):
             SettingsRule(JESettingsKey.CONFIG_JPEG_OPTIMIZE,                                True,                               SettingsFmt(bool)),
             SettingsRule(JESettingsKey.CONFIG_JPEG_SAVEPROFILE,                             False,                              SettingsFmt(bool)),
             SettingsRule(JESettingsKey.CONFIG_JPEG_TRANSPFILLCOLOR,                         '#ffffff',                          SettingsFmt(str)),
+
+            SettingsRule(JESettingsKey.CONFIG_PATH_TGTMODE,                                 'src',                              SettingsFmt(str, ['src', 'usr'])),
+            SettingsRule(JESettingsKey.CONFIG_PATH_USRPATH,                                 '',                                 SettingsFmt(str)),
 
             SettingsRule(JESettingsKey.CONFIG_RENDER_MODE,                                  JESettingsValues.RENDER_MODE_FINAL, SettingsFmt(str, [JESettingsValues.RENDER_MODE_FINAL,
                                                                                                                                                   JESettingsValues.RENDER_MODE_DIFFVALUE,
@@ -204,7 +214,6 @@ class JESettings(Settings):
                                                                                                                                                   JESettingsValues.FILTER_MITCHELL,
                                                                                                                                                   JESettingsValues.FILTER_NEAREST_NEIGHBOUR])),
         ]
-
         super(JESettings, self).__init__(pluginId, rules)
 
     @staticmethod

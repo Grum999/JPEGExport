@@ -26,8 +26,8 @@
    <property name="bottomMargin">
     <number>0</number>
    </property>
-   <item row="1" column="0" colspan="2">
-    <widget class="QLabel" name="label_7">
+   <item row="0" column="0" colspan="2">
+    <widget class="QLabel" name="label_8">
      <property name="font">
       <font>
        <pointsize>12</pointsize>
@@ -39,28 +39,11 @@
       <string notr="true">background-color: palette(light);padding: 6;</string>
      </property>
      <property name="text">
-      <string>Content</string>
+      <string>Target path</string>
      </property>
     </widget>
    </item>
-   <item row="3" column="0" colspan="2">
-    <widget class="QLabel" name="label_5">
-     <property name="font">
-      <font>
-       <pointsize>12</pointsize>
-       <weight>75</weight>
-       <bold>true</bold>
-      </font>
-     </property>
-     <property name="styleSheet">
-      <string notr="true">background-color: palette(light);padding: 6;</string>
-     </property>
-     <property name="text">
-      <string>JPEG Options</string>
-     </property>
-    </widget>
-   </item>
-   <item row="4" column="0" colspan="2">
+   <item row="5" column="0" colspan="2">
     <widget class="WExportOptionsJpeg" name="wJpegOptions" native="true">
      <property name="enabled">
       <bool>false</bool>
@@ -82,7 +65,54 @@
      </property>
     </widget>
    </item>
-   <item row="5" column="0" colspan="2">
+   <item row="2" column="0" colspan="2">
+    <widget class="QLabel" name="label_7">
+     <property name="font">
+      <font>
+       <pointsize>12</pointsize>
+       <weight>75</weight>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: palette(light);padding: 6;</string>
+     </property>
+     <property name="text">
+      <string>Content</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="0" colspan="2">
+    <widget class="QLabel" name="label_5">
+     <property name="font">
+      <font>
+       <pointsize>12</pointsize>
+       <weight>75</weight>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: palette(light);padding: 6;</string>
+     </property>
+     <property name="text">
+      <string>JPEG Options</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="0" colspan="2">
+    <widget class="WJEContentOptions" name="wContentOptions" native="true">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>100</height>
+      </size>
+     </property>
+    </widget>
+   </item>
+   <item row="6" column="0" colspan="2">
     <spacer name="verticalSpacer">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
@@ -95,8 +125,8 @@
      </property>
     </spacer>
    </item>
-   <item row="2" column="0" colspan="2">
-    <widget class="WJEContentOptions" name="wContentOptions" native="true">
+   <item row="1" column="0" colspan="2">
+    <widget class="WJEPathOptions" name="wPathOptions" native="true">
      <property name="enabled">
       <bool>false</bool>
      </property>
@@ -120,7 +150,13 @@
   <customwidget>
    <class>WJEContentOptions</class>
    <extends>QWidget</extends>
-   <header>jpegexport.je.jecontentoptions</header>
+   <header>jpegexport.je.wjecontentoptions</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>WJEPathOptions</class>
+   <extends>QWidget</extends>
+   <header>jpegexport.je.wjepathoptions</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

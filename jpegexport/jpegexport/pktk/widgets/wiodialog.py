@@ -1609,7 +1609,7 @@ class WDialogFile(QFileDialog):
 
     @staticmethod
     def openDirectory(caption=None, directory=None, filter=None, options=None):
-        """A predefined function to open a DIERCTORY
+        """A predefined function to open a DIRECTORY
 
         If action is cancelled, return None
         Otherwise return a <dict> with following keys:
