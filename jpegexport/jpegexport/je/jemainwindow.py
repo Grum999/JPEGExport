@@ -45,7 +45,7 @@ from jpegexport.pktk.modules.imgutils import (imgBoxSize,
                                               buildIcon
                                               )
 from jpegexport.pktk.modules.timeutils import Timer
-from jpegexport.pktk.widgets.wefiledialog import WEFileDialog
+from jpegexport.pktk.widgets.wiodialog import WDialogFile
 from jpegexport.pktk.widgets.wabout import WAboutWindow
 from jpegexport.pktk.widgets.wedialog import WEDialog
 
@@ -591,22 +591,23 @@ class JEMainWindow(WEDialog):
 
     def __saveFileName(self):
         """Set exported file name"""
-        fDialog = WEFileDialog()
-        fDialog.setFileMode(QFileDialog.AnyFile)
-        fDialog.setNameFilter(i18n("JPEG image (*.jpg *.jpeg)"))
-        fDialog.setViewMode(QFileDialog.Detail)
-        fDialog.setAcceptMode(QFileDialog.AcceptSave)
-        fDialog.setDefaultSuffix('jpeg')
-        fDialog.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint | Qt.WindowStaysOnTopHint)
-
         if self.leFileName.text() != '':
-            fDialog.selectFile(self.leFileName.text())
+            if returned := WDialogFile.saveFile(i18n('Select exported file'),
+                                                self.leFileName.text(),
+                                                i18n("JPEG image (*.jpg *.jpeg)"),
+                                                {WDialogFile.OPTION_SETTINGS_DEFSUFFIX: 'jpeg',
+                                                 WDialogFile.OPTION_PREVIEW_WIDGET: WDialogFile.WSubWidgetImgPreview()
+                                                 }
+                                                ):
+                self.leFileName.setText(returned['file'])
+                self.pbOk.setEnabled(True)
         else:
-            fDialog.setDirectory(JESettings.get(JESettingsKey.CONFIG_FILE_LASTPATH))
-
-        if fDialog.exec():
-            self.leFileName.setText(fDialog.file())
-            self.pbOk.setEnabled(True)
+            if returned := WDialogFile.openDirectory(i18n('Select '),
+                                                     JESettings.get(JESettingsKey.CONFIG_FILE_LASTPATH),
+                                                     i18n("JPEG image (*.jpg *.jpeg)")
+                                                     ):
+                self.leFileName.setText(returned['directory'])
+                self.pbOk.setEnabled(True)
 
     def __renderModeChanged(self):
         """Render mode has been changed, update blending mode"""
