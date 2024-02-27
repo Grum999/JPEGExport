@@ -12,7 +12,7 @@ Then, to be able to put all options (and taking in account new one), the user in
 | Reference | Description                                                |
 |-----------|------------------------------------------------------------|
 | 1         | Access to export settings & settings manager through tabs |
-| 2         | Access to miscellaneous export settings<br><br>*Crop & Resize options*<br>![Main interface](https://github.com/Grum999/JPEGExport/raw/main/screenshots/r1-3-0_mainwindow_exportedContent.jpeg)<br>*Crop & Resize options*<br>![Main interface](https://github.com/Grum999/JPEGExport/raw/main/screenshots/r1-3-0_mainwindow_jpegOptions.jpeg) |
+| 2         | Access to miscellaneous export settings<br><br>*Crop & Resize options*<br>![Main interface](./../screenshots/r1-3-0_mainwindow_exportedContent.jpeg)<br>*Crop & Resize options*<br>![Main interface](./../screenshots/r1-3-0_mainwindow_jpegOptions.jpeg) |
 
 
 [Feature #5](https://github.com/Grum999/JPEGExport/issues/5)
