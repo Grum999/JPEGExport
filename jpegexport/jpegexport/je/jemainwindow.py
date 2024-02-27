@@ -1,6 +1,6 @@
 # -----------------------------------------------------------------------------
 # JPEG Export
-# Copyright (C) 2020 - Grum999
+# Copyright (C) 2024 - Grum999
 # -----------------------------------------------------------------------------
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,29 +24,30 @@ import os
 import os.path
 import re
 import shutil
+import sys
 from krita import Krita
 
-import PyQt5.uic
-
-from PyQt5.QtCore import QDir
 from PyQt5.Qt import *
 from PyQt5.QtWidgets import (
-        QDialog,
         QWidget
     )
 
+from .wjepathoptions import WJEPathOptions
 from .jesettings import (
         JESettings,
         JESettingsKey,
         JESettingsValues
     )
 
-from jpegexport.pktk.modules.about import AboutWindow
-from jpegexport.pktk.modules.edialog import EDialog
+from jpegexport.pktk.modules.utils import loadXmlUi
 from jpegexport.pktk.modules.strutils import bytesSizeToStr
-from jpegexport.pktk.modules.imgutils import imgBoxSize
+from jpegexport.pktk.modules.imgutils import (imgBoxSize,
+                                              buildIcon
+                                              )
 from jpegexport.pktk.modules.timeutils import Timer
-from jpegexport.pktk.widgets.wefiledialog import WEFileDialog
+from jpegexport.pktk.widgets.wiodialog import WDialogFile
+from jpegexport.pktk.widgets.wabout import WAboutWindow
+from jpegexport.pktk.widgets.wedialog import WEDialog
 
 from jpegexport.pktk.modules.ekrita import (
         EKritaWindow,
@@ -54,10 +55,60 @@ from jpegexport.pktk.modules.ekrita import (
         EKritaNode
     )
 
+from jpegexport.pktk import *
 
 # -----------------------------------------------------------------------------
-class JEMainWindow(EDialog):
+class WJEViewer(QWidget):
+    """A basic QWidget used to display setups"""
+
+    def __init__(self, parent=None):
+        super(WJEViewer, self).__init__(parent)
+
+        uiFileName = os.path.join(os.path.dirname(__file__), 'resources', 'wjesettingsviewer.ui')
+
+        # temporary add <plugin> path to sys.path to let 'xxx.widgets.xxx' being accessible during xmlLoad()
+        # because of WColorButton path that must be absolut in UI file
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+        loadXmlUi(uiFileName, self)
+
+        # remove temporary added path
+        sys.path.pop()
+
+    def setData(self, data):
+        """Data to preview"""
+        self.wJpegOptions.setOptions({
+                'quality': data[JESettingsKey.CONFIG_JPEG_QUALITY.id()],
+                'smoothing': data[JESettingsKey.CONFIG_JPEG_SMOOTHING.id()],
+                'subsampling': data[JESettingsKey.CONFIG_JPEG_SUBSAMPLING.id()],
+                'progressive': data[JESettingsKey.CONFIG_JPEG_PROGRESSIVE.id()],
+                'optimize': data[JESettingsKey.CONFIG_JPEG_OPTIMIZE.id()],
+                'saveProfile': data[JESettingsKey.CONFIG_JPEG_SAVEPROFILE.id()],
+                'transparencyFillcolor': data[JESettingsKey.CONFIG_JPEG_TRANSPFILLCOLOR.id()]
+            })
+
+        self.wContentOptions.setProperties({
+                JESettingsKey.CONFIG_MISC_CROP_ACTIVE: data[JESettingsKey.CONFIG_MISC_CROP_ACTIVE.id()],
+                JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE: data[JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE.id()],
+                JESettingsKey.CONFIG_MISC_RESIZE_FILTER: data[JESettingsKey.CONFIG_MISC_RESIZE_FILTER.id()],
+                JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE: data[JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE.id()],
+                JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH: data[JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH.id()],
+                JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT: data[JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT.id()],
+                JESettingsKey.CONFIG_MISC_RESIZE_UNIT: data[JESettingsKey.CONFIG_MISC_RESIZE_UNIT.id()]
+                })
+
+        self.wPathOptions.setProperties({
+                JESettingsKey.CONFIG_PATH_TGTMODE: data[JESettingsKey.CONFIG_PATH_TGTMODE.id()],
+                JESettingsKey.CONFIG_PATH_USRPATH: data[JESettingsKey.CONFIG_PATH_USRPATH.id()]
+            })
+
+# -----------------------------------------------------------------------------
+class JEMainWindow(WEDialog):
     """Main JpegExport window"""
+
+    PAGE_TGTPATH = 0
+    PAGE_OPTCONTENT = 1
+    PAGE_JPEGEXPORT = 2
 
     # A flag to ensure that class is instancied only once
     __IS_OPENED = False
@@ -70,17 +121,6 @@ class JEMainWindow(EDialog):
 
     __UPDATE_MODE_CROP =   0b00000001
     __UPDATE_MODE_RESIZE = 0b00000010
-
-    __RESIZE_METHOD = [
-            (i18n('B-Spline'),          JESettingsValues.FILTER_BSPLINE),
-            ('Bell',                    JESettingsValues.FILTER_BELL),
-            (i18n('Bicubic'),           JESettingsValues.FILTER_BICUBIC),
-            (i18n('Bilinear'),          JESettingsValues.FILTER_BILINEAR),
-            ('Hermite',                 JESettingsValues.FILTER_HERMITE),
-            (i18n('Lancsoz3'),          JESettingsValues.FILTER_LANCZOS3),
-            ('Mitchell',                JESettingsValues.FILTER_MITCHELL),
-            (i18n('Nearest neighbour'), JESettingsValues.FILTER_NEAREST_NEIGHBOUR)
-        ]
 
     def __init__(self, jeName="JPEG Export", jeVersion="testing", parent=None):
         super(JEMainWindow, self).__init__(os.path.join(os.path.dirname(__file__), 'resources', 'jemainwindow.ui'), parent)
@@ -115,13 +155,19 @@ class JEMainWindow(EDialog):
         self.__boundsSource = None
         self.__sizeTarget = None
 
+        self.__pgOptContent = QListWidgetItem(buildIcon("pktk:image_crop"), i18n("Exported content"))
+        self.__pgOptContent.setData(Qt.UserRole, JEMainWindow.PAGE_OPTCONTENT)
+        self.__pgOptJpegExport = QListWidgetItem(buildIcon("pktk:tune_img_slider"), i18n("JPEG Options"))
+        self.__pgOptJpegExport.setData(Qt.UserRole, JEMainWindow.PAGE_JPEGEXPORT)
+        self.__pgOptTgtPath = QListWidgetItem(buildIcon("pktk:folder_tune"), i18n("Target document"))
+        self.__pgOptTgtPath.setData(Qt.UserRole, JEMainWindow.PAGE_TGTPATH)
+
         if self.__doc is None:
             # no document opened: cancel plugin
-            QMessageBox.warning(
-                    QWidget(),
-                    f"{jeName}",
-                    i18n("There's no active document: <i>JPEG Export</i> plugin only works with opened documents")
-                )
+            QMessageBox.warning(QWidget(),
+                                f"{jeName}",
+                                i18n("There's no active document: <i>JPEG Export</i> plugin only works with opened documents")
+                                )
             self.close()
             return
 
@@ -143,13 +189,6 @@ class JEMainWindow(EDialog):
         self.__initialiseDoc()
 
         self.show()
-
-    def showEvent(self, event):
-        """Dialog is visible"""
-        # define minimum width for pct input value, according to current width defined for width/height input values
-        self.dsbResizePct.setMinimumWidth(self.sbResizedMaxWidth.width()+self.sbResizedMaxHeight.width()+self.lblResizeX.width())
-        self.dsbResizePct.setMaximumWidth(self.sbResizedMaxWidth.width()+self.sbResizedMaxHeight.width()+self.lblResizeX.width())
-        self.__updateResizeUnit(False)
 
     def __initialiseDoc(self):
         """Initialise temporary document"""
@@ -204,6 +243,8 @@ class JEMainWindow(EDialog):
         """Initialise window interface"""
         JESettings.load()
 
+        self.twMain.setCurrentIndex(0)
+
         self.wJpegOptions.setOptions({
                 'quality': JESettings.get(JESettingsKey.CONFIG_JPEG_QUALITY),
                 'smoothing': JESettings.get(JESettingsKey.CONFIG_JPEG_SMOOTHING),
@@ -212,15 +253,22 @@ class JEMainWindow(EDialog):
                 'optimize': JESettings.get(JESettingsKey.CONFIG_JPEG_OPTIMIZE),
                 'saveProfile': JESettings.get(JESettingsKey.CONFIG_JPEG_SAVEPROFILE),
                 'transparencyFillcolor': JESettings.get(JESettingsKey.CONFIG_JPEG_TRANSPFILLCOLOR)
-            })
+                })
 
-        newFileName = self.__doc.fileName()
-        if newFileName == '':
-            newFileName = os.path.join(JESettings.get(JESettingsKey.CONFIG_FILE_LASTPATH), 'newDocument.jpeg')
-        else:
-            newFileName = re.sub('\.[^.]+$', '.jpeg', newFileName)
+        self.wContentOptions.setProperties({
+                JESettingsKey.CONFIG_MISC_CROP_ACTIVE: JESettings.get(JESettingsKey.CONFIG_MISC_CROP_ACTIVE),
+                JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE: JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE),
+                JESettingsKey.CONFIG_MISC_RESIZE_FILTER: JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_FILTER),
+                JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE: JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE),
+                JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH: JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH),
+                JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT: JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT),
+                JESettingsKey.CONFIG_MISC_RESIZE_UNIT: JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_UNIT)
+                })
 
-        self.leFileName.setText(newFileName)
+        self.wPathOptions.setProperties({
+                JESettingsKey.CONFIG_PATH_TGTMODE: JESettings.get(JESettingsKey.CONFIG_PATH_TGTMODE),
+                JESettingsKey.CONFIG_PATH_USRPATH: JESettings.get(JESettingsKey.CONFIG_PATH_USRPATH)
+                })
 
         renderMode = JESettings.get(JESettingsKey.CONFIG_RENDER_MODE)
         if renderMode == JESettingsValues.RENDER_MODE_FINAL:
@@ -232,7 +280,46 @@ class JEMainWindow(EDialog):
         elif renderMode == JESettingsValues.RENDER_MODE_SOURCE:
             self.rbRenderSrc.setChecked(True)
 
+        # window geometry
+        sizeW = JESettings.get(JESettingsKey.CONFIG_WINDOW_GEOMETRY_SIZE_WIDTH)
+        sizeH = JESettings.get(JESettingsKey.CONFIG_WINDOW_GEOMETRY_SIZE_HEIGHT)
+        positionX = JESettings.get(JESettingsKey.CONFIG_WINDOW_GEOMETRY_POSITION_X)
+        positionY = JESettings.get(JESettingsKey.CONFIG_WINDOW_GEOMETRY_POSITION_Y)
+        # geometry is taken in account only if size > 0 (otherwise, mean that value weren't initialized)
+        if sizeH > 0 and sizeW > 0:
+            self.setGeometry(positionX, positionY, sizeW, sizeH)
+
+        # setup manager
+        self.wsmSetups.setupApplied.connect(self.__applySetupFromManager)
+        self.wsmSetups.setPropertiesEditorSetupPreviewWidgetClass(WJEViewer)
+        self.wsmSetups.setExtensionFilter(f"{i18n('JPEG Export Setups')} (*.jesetups)")
+        self.wsmSetups.setStoredDataFormat('je--export_setup', '1.0.0')
+        self.wsmSetups.setIconSizeIndex(JESettings.get(JESettingsKey.CONFIG_SETUPMANAGER_ZOOMLEVEL))
+        self.wsmSetups.setColumnSetupWidth(JESettings.get(JESettingsKey.CONFIG_SETUPMANAGER_COLUMNWIDTH))
+        self.wsmSetups.setPropertiesEditorIconSelectorViewMode(JESettings.get(JESettingsKey.CONFIG_SETUPMANAGER_PROPERTIES_DLGBOX_ICON_VIEWMODE))
+        self.wsmSetups.setPropertiesEditorIconSelectorIconSizeIndex(JESettings.get(JESettingsKey.CONFIG_SETUPMANAGER_PROPERTIES_DLGBOX_ICON_ZOOMLEVEL))
+        self.wsmSetups.setPropertiesEditorColorPickerLayout(JESettings.getTxtColorPickerLayout())
+
+        lastSetupFileName = JESettings.get(JESettingsKey.CONFIG_SETUPMANAGER_LASTFILE)
+        if lastSetupFileName != '' and os.path.exists(lastSetupFileName):
+            self.wsmSetups.openSetup(lastSetupFileName, False)
+        else:
+            lastSetupFileName = os.path.join(QStandardPaths.writableLocation(QStandardPaths.GenericConfigLocation), f'krita-plugin-{PkTk.packageName()}-default.jesetups')
+            self.wsmSetups.newSetups(True)
+            self.wsmSetups.saveSetup(lastSetupFileName, 'Default JPEG Export Setups')
+
+        self.wsmSetups.setIconUri('pktk:tune_img_slider')
+
+        # pages
+        self.lvPages.addItem(self.__pgOptTgtPath)
+        self.lvPages.addItem(self.__pgOptContent)
+        self.lvPages.addItem(self.__pgOptJpegExport)
+
+        # signals
+        self.wContentOptions.docUpdate.connect(lambda: self.__updateDoc(JEMainWindow.__UPDATE_MODE_CROP))
+        self.wContentOptions.sizeUpdate.connect(lambda immediate: self.__updateNewSize(immediate))
         self.wJpegOptions.optionUpdated.connect(self.__updatePreview)
+
         self.pbOk.clicked.connect(self.__acceptChange)
         self.pbCancel.clicked.connect(self.__rejectChange)
         self.pbAbout.clicked.connect(self.__displayAbout)
@@ -242,69 +329,128 @@ class JEMainWindow(EDialog):
         self.rbRenderXOR.toggled.connect(self.__renderModeChanged)
         self.rbRenderSrc.toggled.connect(self.__renderModeChanged)
 
-        # crop
-        self.cbCropToSelection.setChecked(JESettings.get(JESettingsKey.CONFIG_MISC_CROP_ACTIVE))
-        selection = self.__doc.selection()
-        if selection:
-            self.cbCropToSelection.setEnabled(True)
-            self.cbCropToSelection.setText(i18n("Crop to selection")+f" ({selection.width()}x{selection.height()})")
-        else:
-            self.cbCropToSelection.setEnabled(False)
-
-        # resize
-        self.cbResizeDocument.setChecked(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE))
-
-        self.cbxResizedUnit.addItem('px', 'px')
-        self.cbxResizedUnit.addItem('%', '%')
-        self.cbxResizedUnit.addItem('px (width)', 'wpx')
-        self.cbxResizedUnit.addItem('px (height)', 'hpx')
-        self.cbxResizedUnit.setCurrentIndex(self.__cbxIndexForUnit(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_UNIT)))
-
-        defaultSelected = JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_FILTER)
-        for index, value in enumerate(JEMainWindow.__RESIZE_METHOD):
-            self.cbxResizeFilter.addItem(value[0], value[1])
-            if value[1] == defaultSelected:
-                self.cbxResizeFilter.setCurrentIndex(index)
-
-        self.dsbResizePct.setValue(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE))
-        self.sbResizedMaxWidth.setValue(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH))
-        self.sbResizedMaxHeight.setValue(JESettings.get(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT))
-        self.wResizeOptions.setEnabled(self.cbResizeDocument.isChecked())
-
-        # signals
-        self.cbCropToSelection.toggled.connect(lambda x: self.__updateDoc(JEMainWindow.__UPDATE_MODE_CROP))
-        self.cbResizeDocument.toggled.connect(lambda x: self.__updateNewSize(True))
-        self.cbxResizedUnit.currentIndexChanged.connect(lambda x: self.__updateResizeUnit(True))
-        self.cbxResizeFilter.currentIndexChanged.connect(lambda x: self.__updateNewSize(False))
-        self.sbResizedMaxWidth.valueChanged.connect(lambda x: self.__updateNewSize(False))
-        self.sbResizedMaxHeight.valueChanged.connect(lambda x: self.__updateNewSize(False))
-        self.dsbResizePct.valueChanged.connect(lambda x: self.__updateNewSize(False))
+        self.lvPages.itemSelectionChanged.connect(self.__pageChanged)
 
         self.tbSaveAs.clicked.connect(self.__saveFileName)
         self.leFileName.mouseDoubleClickEvent = lambda x: self.__saveFileName()
 
-    def __cbxIndexForUnit(self, unit):
-        """Return index for given unit for cbxResizedUnit
+        self.wPathOptions.pathUpdated.connect(self.__updateFileName)
 
-        Otherwise return None
+        self.__setPage(JESettings.get(JESettingsKey.CONFIG_OPT_INDEX))
+
+        self.__updateFileName()
+
+    def __pageChanged(self):
+        """Set page according to option"""
+        self.swPages.setCurrentIndex(self.lvPages.currentItem().data(Qt.UserRole))
+
+    def __setPage(self, value):
+        """Set page setting
+
+        Select icon, switch to panel
         """
-        for index in range(self.cbxResizedUnit.count()):
-            if self.cbxResizedUnit.itemData(index) == unit:
-                return index
-        return None
+        self.lvPages.setCurrentRow(value)
 
-    def __updatePosition(self):
-        """Get current slider position"""
-        if not self.__viewScrollbarH:
-            # can occurs during initialisation phase
-            return
+    def __applySetupFromManager(self, setupManagerSetup):
+        data = setupManagerSetup.data()
+        self.wJpegOptions.setOptions({
+                'quality': data[JESettingsKey.CONFIG_JPEG_QUALITY.id()],
+                'smoothing': data[JESettingsKey.CONFIG_JPEG_SMOOTHING.id()],
+                'subsampling': data[JESettingsKey.CONFIG_JPEG_SUBSAMPLING.id()],
+                'progressive': data[JESettingsKey.CONFIG_JPEG_PROGRESSIVE.id()],
+                'optimize': data[JESettingsKey.CONFIG_JPEG_OPTIMIZE.id()],
+                'saveProfile': data[JESettingsKey.CONFIG_JPEG_SAVEPROFILE.id()],
+                'transparencyFillcolor': data[JESettingsKey.CONFIG_JPEG_TRANSPFILLCOLOR.id()]
+                })
 
-        if self.cbCropToSelection.isEnabled() and self.cbCropToSelection.isChecked():
-            # crop mode
-            self.__positionCrop = QPoint(self.__viewScrollbarH.sliderPosition(), self.__viewScrollbarV.sliderPosition())
+        self.wContentOptions.setProperties({
+                JESettingsKey.CONFIG_MISC_CROP_ACTIVE: data[JESettingsKey.CONFIG_MISC_CROP_ACTIVE.id()],
+                JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE: data[JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE.id()],
+                JESettingsKey.CONFIG_MISC_RESIZE_FILTER: data[JESettingsKey.CONFIG_MISC_RESIZE_FILTER.id()],
+                JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE: data[JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE.id()],
+                JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH: data[JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH.id()],
+                JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT: data[JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT.id()],
+                JESettingsKey.CONFIG_MISC_RESIZE_UNIT: data[JESettingsKey.CONFIG_MISC_RESIZE_UNIT.id()]
+                })
+
+        self.wPathOptions.setProperties({
+                JESettingsKey.CONFIG_PATH_TGTMODE: data[JESettingsKey.CONFIG_PATH_TGTMODE.id()],
+                JESettingsKey.CONFIG_PATH_USRPATH: data[JESettingsKey.CONFIG_PATH_USRPATH.id()]
+                })
+
+    def __setupData(self):
+        """Return a dict with current setup data"""
+        jpegOptions = self.wJpegOptions.options()
+
+        returned = {JESettingsKey.CONFIG_JPEG_QUALITY.id(): jpegOptions['quality'],
+                    JESettingsKey.CONFIG_JPEG_SMOOTHING.id(): jpegOptions['smoothing'],
+                    JESettingsKey.CONFIG_JPEG_SUBSAMPLING.id(): jpegOptions['subsampling'],
+                    JESettingsKey.CONFIG_JPEG_PROGRESSIVE.id(): jpegOptions['progressive'],
+                    JESettingsKey.CONFIG_JPEG_OPTIMIZE.id(): jpegOptions['optimize'],
+                    JESettingsKey.CONFIG_JPEG_SAVEPROFILE.id(): jpegOptions['saveProfile'],
+                    JESettingsKey.CONFIG_JPEG_TRANSPFILLCOLOR.id(): jpegOptions['transparencyFillcolor'],
+                    JESettingsKey.CONFIG_RENDER_MODE.id(): JESettingsValues.RENDER_MODE_FINAL,
+                    JESettingsKey.CONFIG_MISC_CROP_ACTIVE.id(): self.wContentOptions.property(JESettingsKey.CONFIG_MISC_CROP_ACTIVE),
+                    JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE.id(): self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE),
+                    JESettingsKey.CONFIG_MISC_RESIZE_UNIT.id(): self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_UNIT),
+                    JESettingsKey.CONFIG_MISC_RESIZE_FILTER.id(): self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_FILTER),
+                    JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE.id(): self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE),
+                    JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH.id(): self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH),
+                    JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT.id(): self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT),
+                    JESettingsKey.CONFIG_PATH_TGTMODE.id(): self.wPathOptions.property(JESettingsKey.CONFIG_PATH_TGTMODE),
+                    JESettingsKey.CONFIG_PATH_USRPATH.id(): self.wPathOptions.property(JESettingsKey.CONFIG_PATH_USRPATH)
+                    }
+
+        if self.rbRenderNormal.isChecked():
+            returned[JESettingsKey.CONFIG_RENDER_MODE.id()] = JESettingsValues.RENDER_MODE_FINAL
+        elif self.rbRenderDifference.isChecked():
+            returned[JESettingsKey.CONFIG_RENDER_MODE.id()] = JESettingsValues.RENDER_MODE_DIFFVALUE
+        elif self.rbRenderXOR.isChecked():
+            returned[JESettingsKey.CONFIG_RENDER_MODE.id()] = JESettingsValues.RENDER_MODE_DIFFBITS
+        elif self.rbRenderSrc.isChecked():
+            returned[JESettingsKey.CONFIG_RENDER_MODE.id()] = JESettingsValues.RENDER_MODE_SOURCE
+
+        return returned
+
+    def __updateFileName(self):
+        """Update current file path/filename, taking PATH option"""
+        srcFileName = self.__doc.fileName()
+
+        currentBaseName, ext = os.path.splitext(os.path.basename(self.leFileName.text()))
+
+        pathName = os.path.dirname(srcFileName)
+        baseName, ext = os.path.splitext(os.path.basename(srcFileName))
+
+        pathMode = self.wPathOptions.property(JESettingsKey.CONFIG_PATH_TGTMODE)
+
+        if pathMode == WJEPathOptions.MODE_SRC:
+            if pathName == '' or pathName is None:
+                # if source file is not saved (no file name) then use last path
+                pathMode = WJEPathOptions.MODE_LST
+
+        if pathMode == WJEPathOptions.MODE_LST:
+            pathName = JESettings.get(JESettingsKey.CONFIG_FILE_LASTPATH)
+            if pathName == '' or pathName is None:
+                # if last path name is not defined, then use 'user path'
+                pathMode = WJEPathOptions.MODE_USR
+
+        if pathMode == WJEPathOptions.MODE_USR:
+            pathName = self.wPathOptions.property(JESettingsKey.CONFIG_PATH_USRPATH)
+            if pathName == '' or pathName is None:
+                # if user path is not defined, then use 'user home'
+                pathName = os.path.expanduser('~')
+
+        if currentBaseName != '':
+            baseName = currentBaseName
+
+        if baseName == '':
+            baseName = 'newDocument.jpeg'
         else:
-            # full mode
-            self.__positionFull = QPoint(self.__viewScrollbarH.sliderPosition(), self.__viewScrollbarV.sliderPosition())
+            baseName = f'{baseName}.jpeg'
+
+        newFileName = os.path.join(pathName, baseName)
+
+        self.leFileName.setText(newFileName)
 
     def __calculateBounds(self):
         """calculate bounds from source document
@@ -312,51 +458,22 @@ class JEMainWindow(EDialog):
         . selection  if not cropped to selection
         """
         selection = self.__doc.selection()
+        self.wContentOptions.setDocSelection(selection)
         self.__boundsSource = None
 
-        if self.cbCropToSelection.isEnabled() and self.cbCropToSelection.isChecked() and selection:
-            self.__boundsSource = QRect(selection.x(), selection.y(), selection.width(), selection.height()).intersected(QRect(0, 0, self.__doc.width(), self.__doc.height()))
+        if self.wContentOptions.hasDocSelection() and self.wContentOptions.property(JESettingsKey.CONFIG_MISC_CROP_ACTIVE) and selection:
+            self.__boundsSource = QRect(selection.x(),
+                                        selection.y(),
+                                        selection.width(),
+                                        selection.height()
+                                        ).intersected(QRect(0, 0, self.__doc.width(), self.__doc.height()))
             if self.__boundsSource.width() == 0 or self.__boundsSource.height() == 0:
                 self.__boundsSource = None
-                self.cbCropToSelection.setEnabled(False)
 
         if self.__boundsSource is None:
             self.__boundsSource = QRect(0, 0, self.__doc.width(), self.__doc.height())
 
         self.__updateNewSize(False, True)
-
-    def __updateResizeUnit(self, updateSize=True):
-        """Unit has been modified (px, %, wpx, hpx)
-
-        Update width/height according to unit
-        """
-        if self.cbxResizedUnit.currentData() == JESettingsValues.UNIT_PX:
-            # to 'px'
-            self.dsbResizePct.setVisible(False)
-            self.sbResizedMaxWidth.setVisible(True)
-            self.lblResizeX.setVisible(True)
-            self.sbResizedMaxHeight.setVisible(True)
-        elif self.cbxResizedUnit.currentData() == JESettingsValues.UNIT_PCT:
-            # to '%'
-            self.sbResizedMaxWidth.setVisible(False)
-            self.lblResizeX.setVisible(False)
-            self.sbResizedMaxHeight.setVisible(False)
-            self.dsbResizePct.setVisible(True)
-        elif self.cbxResizedUnit.currentData() == JESettingsValues.UNIT_PX_WIDTH:
-            # to 'wpx'
-            self.dsbResizePct.setVisible(False)
-            self.sbResizedMaxWidth.setVisible(True)
-            self.lblResizeX.setVisible(False)
-            self.sbResizedMaxHeight.setVisible(False)
-        elif self.cbxResizedUnit.currentData() == JESettingsValues.UNIT_PX_HEIGHT:
-            # to 'hpx'
-            self.dsbResizePct.setVisible(False)
-            self.sbResizedMaxWidth.setVisible(False)
-            self.lblResizeX.setVisible(False)
-            self.sbResizedMaxHeight.setVisible(True)
-
-        if updateSize:
-            self.__updateNewSize(True, False)
 
     def __updateNewSize(self, immediate=False, recalculateOnly=False):
         """Size (width and/or height) has been changed
@@ -370,21 +487,36 @@ class JEMainWindow(EDialog):
             self.killTimer(self.__timerResize)
             self.__timerResize = 0
 
-        if self.cbResizeDocument.isChecked():
+        if self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE):
+            currentUnit = self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_UNIT)
+
             # resize checked, recalculate target size
-            if self.cbxResizedUnit.currentData() == JESettingsValues.UNIT_PX:
+            if currentUnit == JESettingsValues.UNIT_PX:
                 # pixels
-                self.__sizeTarget = imgBoxSize(self.__boundsSource.size(), QSize(self.sbResizedMaxWidth.value(), self.sbResizedMaxHeight.value()))
-            elif self.cbxResizedUnit.currentData() == JESettingsValues.UNIT_PCT:
+                self.__sizeTarget = imgBoxSize(self.__boundsSource.size(),
+                                               QSize(self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH),
+                                                     self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT)
+                                                     )
+                                               )
+            elif currentUnit == JESettingsValues.UNIT_PCT:
                 # pct
-                self.__sizeTarget = QSize(round(self.__boundsSource.width() * self.dsbResizePct.value() / 100),
-                                          round(self.__boundsSource.height() * self.dsbResizePct.value() / 100))
-            elif self.cbxResizedUnit.currentData() == JESettingsValues.UNIT_PX_WIDTH:
+                pctValue = self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE) / 100
+                self.__sizeTarget = QSize(round(self.__boundsSource.width() * pctValue),
+                                          round(self.__boundsSource.height() * pctValue))
+            elif currentUnit == JESettingsValues.UNIT_PX_WIDTH:
                 # pixels
-                self.__sizeTarget = imgBoxSize(self.__boundsSource.size(), QSize(self.sbResizedMaxWidth.value(), JEMainWindow.__MAX_WIDTH_AND_HEIGHT))
-            elif self.cbxResizedUnit.currentData() == JESettingsValues.UNIT_PX_HEIGHT:
+                self.__sizeTarget = imgBoxSize(self.__boundsSource.size(),
+                                               QSize(self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH),
+                                                     JEMainWindow.__MAX_WIDTH_AND_HEIGHT
+                                                     )
+                                               )
+            elif currentUnit == JESettingsValues.UNIT_PX_HEIGHT:
                 # pixels
-                self.__sizeTarget = imgBoxSize(self.__boundsSource.size(), QSize(JEMainWindow.__MAX_WIDTH_AND_HEIGHT, self.sbResizedMaxHeight.value()))
+                self.__sizeTarget = imgBoxSize(self.__boundsSource.size(),
+                                               QSize(JEMainWindow.__MAX_WIDTH_AND_HEIGHT,
+                                                     self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT)
+                                                     )
+                                               )
         else:
             # resize not checked, target size = source size
             self.__sizeTarget = QSize(self.__boundsSource.size())
@@ -395,12 +527,26 @@ class JEMainWindow(EDialog):
             else:
                 self.__timerResize = self.startTimer(JEMainWindow.__RESIZE_DELAY)
 
+    def __updatePosition(self):
+        """Get current slider position"""
+        if not self.__viewScrollbarH:
+            # can occurs during initialisation phase
+            return
+
+        if self.wContentOptions.hasDocSelection() and self.wContentOptions.property(JESettingsKey.CONFIG_MISC_CROP_ACTIVE):
+            # crop mode
+            self.__positionCrop = QPoint(self.__viewScrollbarH.sliderPosition(), self.__viewScrollbarV.sliderPosition())
+        else:
+            # full mode
+            self.__positionFull = QPoint(self.__viewScrollbarH.sliderPosition(), self.__viewScrollbarV.sliderPosition())
+
     def __updateDoc(self, mode=None):
         """Update temporary document, taking in account the current checkbox 'Crop to selection' & 'Resize document' state"""
+        self.wsmSetups.setCurrentSetupData(self.__setupData())
+
         # recalculate bounds
         self.__calculateBounds()
 
-        self.wResizeOptions.setEnabled(self.cbResizeDocument.isChecked())
         applyResize = (self.__sizeTarget != self.__boundsSource.size())
 
         if not applyResize and mode == JEMainWindow.__UPDATE_MODE_RESIZE and self.__sizeTarget == self.__tmpDoc.bounds().size():
@@ -415,7 +561,7 @@ class JEMainWindow(EDialog):
                                           0, 0, self.__boundsSource.width(), self.__boundsSource.height())
         if applyResize:
             resolution = round(self.__tmpDoc.xRes())
-            self.__tmpDoc.scaleImage(self.__sizeTarget.width(), self.__sizeTarget.height(), resolution, resolution, self.cbxResizeFilter.currentData())
+            self.__tmpDoc.scaleImage(self.__sizeTarget.width(), self.__sizeTarget.height(), resolution, resolution, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_FILTER))
         self.__tmpDoc.refreshProjection()
 
         # force jpeg export from tmpDoc => update preview
@@ -425,7 +571,7 @@ class JEMainWindow(EDialog):
         self.__tmpDocPreviewSrcNode.setPixelData(self.__tmpDoc.pixelData(0, 0, self.__tmpDoc.width(), self.__tmpDoc.height()), 0, 0, self.__tmpDoc.width(), self.__tmpDoc.height())
         self.__tmpDocPreview.refreshProjection()
 
-        if self.cbCropToSelection.isEnabled() and self.cbCropToSelection.isChecked():
+        if self.wContentOptions.hasDocSelection() and self.wContentOptions.property(JESettingsKey.CONFIG_MISC_CROP_ACTIVE):
             # crop mode
             if self.__positionCrop is None:
                 # no position in memory, center
@@ -445,21 +591,23 @@ class JEMainWindow(EDialog):
 
     def __saveFileName(self):
         """Set exported file name"""
-        fDialog = WEFileDialog()
-        fDialog.setFileMode(QFileDialog.AnyFile)
-        fDialog.setNameFilter(i18n("JPEG image (*.jpg *.jpeg)"))
-        fDialog.setViewMode(QFileDialog.Detail)
-        fDialog.setAcceptMode(QFileDialog.AcceptSave)
-        fDialog.setDefaultSuffix('jpeg')
-
         if self.leFileName.text() != '':
-            fDialog.selectFile(self.leFileName.text())
+            if returned := WDialogFile.saveFile(i18n('Select exported file'),
+                                                self.leFileName.text(),
+                                                i18n("JPEG image (*.jpg *.jpeg)"),
+                                                {WDialogFile.OPTION_SETTINGS_DEFSUFFIX: 'jpeg',
+                                                 WDialogFile.OPTION_PREVIEW_WIDGET: WDialogFile.WSubWidgetImgPreview()
+                                                 }
+                                                ):
+                self.leFileName.setText(returned['file'])
+                self.pbOk.setEnabled(True)
         else:
-            fDialog.setDirectory(JESettings.get(JESettingsKey.CONFIG_FILE_LASTPATH))
-
-        if fDialog.exec():
-            self.leFileName.setText(fDialog.file())
-            self.pbOk.setEnabled(True)
+            if returned := WDialogFile.openDirectory(i18n('Select '),
+                                                     JESettings.get(JESettingsKey.CONFIG_FILE_LASTPATH),
+                                                     i18n("JPEG image (*.jpg *.jpeg)")
+                                                     ):
+                self.leFileName.setText(returned['directory'])
+                self.pbOk.setEnabled(True)
 
     def __renderModeChanged(self):
         """Render mode has been changed, update blending mode"""
@@ -476,7 +624,7 @@ class JEMainWindow(EDialog):
             self.__tmpDocPreviewFileNode.setBlendingMode('normal')
             self.__tmpDocPreviewFileNode.setVisible(False)
 
-    def __updatePreview(self):
+    def __updatePreview(self, src=None):
         """Update preview, according to current jpeg export settings"""
         if self.__timerPreview != 0:
             # if a timer is already running, kill it
@@ -484,6 +632,7 @@ class JEMainWindow(EDialog):
         # create a new timer, waiting a little bit before rendering preview
         # (avoid to render preview each time a property is modified)
         self.__timerPreview = self.startTimer(JEMainWindow.__UPDATE_DELAY)
+        self.wsmSetups.setCurrentSetupData(self.__setupData())
 
     def timerEvent(self, event):
         """Update preview when timer is triggered"""
@@ -538,6 +687,11 @@ class JEMainWindow(EDialog):
 
     def __rejectChange(self):
         """User clicked on cancel button"""
+        # need save last setups file name in all case
+        JESettings.set(JESettingsKey.CONFIG_SETUPMANAGER_LASTFILE, self.wsmSetups.lastFileName())
+        JESettings.save()
+        self.wsmSetups.saveSetup(self.wsmSetups.lastFileName())
+
         self.close()
 
     def __acceptChange(self):
@@ -548,7 +702,14 @@ class JEMainWindow(EDialog):
         # save export preferences
         options = self.wJpegOptions.options()
 
+        rect = self.geometry()
+
         JESettings.set(JESettingsKey.CONFIG_FILE_LASTPATH, os.path.dirname(self.leFileName.text()))
+
+        JESettings.set(JESettingsKey.CONFIG_WINDOW_GEOMETRY_SIZE_WIDTH, rect.width())
+        JESettings.set(JESettingsKey.CONFIG_WINDOW_GEOMETRY_SIZE_HEIGHT, rect.height())
+        JESettings.set(JESettingsKey.CONFIG_WINDOW_GEOMETRY_POSITION_X, rect.x())
+        JESettings.set(JESettingsKey.CONFIG_WINDOW_GEOMETRY_POSITION_Y, rect.y())
 
         JESettings.set(JESettingsKey.CONFIG_JPEG_QUALITY, options['quality'])
         JESettings.set(JESettingsKey.CONFIG_JPEG_SMOOTHING, options['smoothing'])
@@ -567,22 +728,33 @@ class JEMainWindow(EDialog):
         elif self.rbRenderSrc.isChecked():
             JESettings.set(JESettingsKey.CONFIG_RENDER_MODE, JESettingsValues.RENDER_MODE_SOURCE)
 
-        JESettings.set(JESettingsKey.CONFIG_MISC_CROP_ACTIVE, self.cbCropToSelection.isChecked())
-        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE, self.cbResizeDocument.isChecked())
+        JESettings.set(JESettingsKey.CONFIG_MISC_CROP_ACTIVE, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_CROP_ACTIVE))
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_ACTIVE))
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_UNIT, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_UNIT))
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_FILTER, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_FILTER))
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE))
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH))
+        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT, self.wContentOptions.property(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT))
 
-        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_UNIT, self.cbxResizedUnit.currentData())
-        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_FILTER, self.cbxResizeFilter.currentData())
-        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PCT_VALUE, self.dsbResizePct.value())
-        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PX_WIDTH, self.sbResizedMaxWidth.value())
-        JESettings.set(JESettingsKey.CONFIG_MISC_RESIZE_PX_HEIGHT, self.sbResizedMaxHeight.value())
+        JESettings.setTxtColorPickerLayout(self.wsmSetups.propertiesEditorColorPickerLayout())
+        JESettings.set(JESettingsKey.CONFIG_SETUPMANAGER_LASTFILE, self.wsmSetups.lastFileName())
+        JESettings.set(JESettingsKey.CONFIG_SETUPMANAGER_ZOOMLEVEL, self.wsmSetups.iconSizeIndex())
+        JESettings.set(JESettingsKey.CONFIG_SETUPMANAGER_COLUMNWIDTH, self.wsmSetups.columnSetupWidth())
+        JESettings.set(JESettingsKey.CONFIG_SETUPMANAGER_PROPERTIES_DLGBOX_ICON_VIEWMODE, self.wsmSetups.propertiesEditorIconSelectorViewMode())
+        JESettings.set(JESettingsKey.CONFIG_SETUPMANAGER_PROPERTIES_DLGBOX_ICON_ZOOMLEVEL, self.wsmSetups.propertiesEditorIconSelectorIconSizeIndex())
+
+        JESettings.set(JESettingsKey.CONFIG_PATH_TGTMODE, self.wPathOptions.property(JESettingsKey.CONFIG_PATH_TGTMODE))
+        JESettings.set(JESettingsKey.CONFIG_PATH_USRPATH, self.wPathOptions.property(JESettingsKey.CONFIG_PATH_USRPATH))
 
         JESettings.save()
+
+        self.wsmSetups.saveSetup(self.wsmSetups.lastFileName())
 
         self.close()
 
     def __displayAbout(self):
         # display about window
-        AboutWindow(self.__jeName, self.__jeVersion, os.path.join(os.path.dirname(__file__), 'resources', 'png', 'buli-powered-big.png'), None, ':JPEG Export')
+        WAboutWindow(self.__jeName, self.__jeVersion, os.path.join(os.path.dirname(__file__), 'resources', 'png', 'buli-powered-big.png'), None, ':JPEG Export')
 
     def __closeDocPreview(self, deleteTmpFile=False):
         """Close the temporary document preview"""

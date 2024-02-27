@@ -1,44 +1,60 @@
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # PyKritaToolKit
-# Copyright (C) 2019-2021 - Grum999
-#
-# A toolkit to make pykrita plugin coding easier :-)
+# Copyright (C) 2019-2022 - Grum999
 # -----------------------------------------------------------------------------
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.
-# If not, see https://www.gnu.org/licenses/
+# https://spdx.org/licenses/GPL-3.0-or-later.html
+# -----------------------------------------------------------------------------
+# A Krita plugin framework
 # -----------------------------------------------------------------------------
 
-
-
-
+# -----------------------------------------------------------------------------
+# The wsearchinput module provides a widget to easily manage input search UI
+#
+# Main class from this module
+#
+# - WSearchInput:
+#       Widget
+#       An input widget with optinal buttons
+#
 # -----------------------------------------------------------------------------
 
 import html
 import re
 
 from PyQt5.Qt import *
+from PyQt5.QtGui import (
+        QBrush,
+        QColor,
+        QFont,
+        QTextCursor,
+        QTextFormat,
+        QTextDocument,
+        QPalette
+    )
 from PyQt5.QtCore import (
         pyqtSignal as Signal
     )
 from PyQt5.QtWidgets import (
-        QWidget
+        QWidget,
+        QToolButton
     )
 
 
-from ..modules.utils import replaceLineEditClearButton
+from ..modules.utils import (
+        replaceLineEditClearButton,
+        regExIsValid
+    )
+from ..modules.listutils import (
+        EXTRASELECTION_FILTER_REMOVE,
+        filterExtraSelections
+    )
 from ..modules.imgutils import buildIcon
+from .wlabelelide import WLabelElide
 from .wseparator import WVLine
+
+from ..pktk import *
 
 
 class SearchOptions:
@@ -50,7 +66,7 @@ class SearchOptions:
 
 
 class WSearchInput(QWidget):
-    """A LineEdit combined with some buttons to provide a ready-to-use search bar tool
+    r"""A LineEdit combined with some buttons to provide a ready-to-use search bar tool
 
     If not OPTION_SHOW_REPLACE set:
         -> OPTION_SHOW_BUTTON_ALL is ignored (search/replace all buttons are not available)
@@ -69,17 +85,21 @@ class WSearchInput(QWidget):
         |                             |     |     |     |     |
         |                             |     |     |     |     |     +-----------  OPTION_SHOW_BUTTON_HIGHLIGHTALL
         |                             |     |     |     |     |     |
-        |                             |     |     |     |     |     |     +-----  OPTION_SHOW_BUTTON_SHOWHIDE
-        |                             |     |     |     |     |     |     |
-        |                             |     |     |     |     |     |     |
-        V                             V     V     V     V     V     V     V
-    +-----------------------------+ +---+ +---+ +---+ +---+ +---+ +---+ +---+
-    | xxxx                        | |   | |   | |   | |   | |   | |   | |   |
-    +-----------------------------+ +---+ +---+ +---+ +---+ +---+ +---+ +---+
+        |                             |     |     |     |     |     |       +---  OPTION_SHOW_BUTTON_SHOWHIDE
+        |                             |     |     |     |     |     |       |
+        |                             |     |     |     |     |     |       |
+        V                             V     V     V     V     V     V       V
+    +---------------------------+ | +---+ +---+ +---+ +---+ +---+ +---+ | +---+
+    | xxxx                      | | |   | |   | |   | |   | |   | |   | | |   |
+    +---------------------------+ | +---+ +---+ +---+ +---+ +---+ +---+ | +---+
 
-                                    \_________________________________/
-                                                     |
-                                                     +--------------------------  Buttons visibles according to OPTION_STATE_BUTTONSHOW value
+                                  ^                                     ^
+                                  |                                     |
+                                  +-------------------------------------+------- OPTION_HIDE_VSEPARATORL & OPTION_HIDE_VSEPARATORR (if set, vertical separators are hidden)
+
+                                    \_________________________________________/
+                                                        |
+                                                        +-----------------------  Buttons visibles according to OPTION_STATE_BUTTONSHOW value
 
 
 
@@ -119,7 +139,6 @@ class WSearchInput(QWidget):
         |
         +---------------------------------------------------------------------------  replace text entry
 
-
     """
     searchOptionModified = Signal(str, int)         # when at least one search option has been modified value has been modified
     searchActivated = Signal(str, int, bool)        # when RETURN key has been pressed
@@ -127,9 +146,10 @@ class WSearchInput(QWidget):
     replaceActivated = Signal(str, str, int, bool)  # when RETURN key has been pressed
     replaceModified = Signal(str, str, int)         # when replace value has been modified
 
-    # reserved                          0b000000000000000000000000000XXXXX
+    # reserved                          0b000000000000000000000000xxxXXXXX
 
-    OPTION_SHOW_BUTTON_SEARCH =         0b00000000000000000000000100000000  # display SEARCH button                     ==> taken in account without OPTION_SHOW_REPLACE option only (OPTION_SHOW_REPLACE implies SEARCH button)
+    OPTION_SHOW_BUTTON_SEARCH =         0b00000000000000000000000100000000  # display SEARCH button                     ==> taken in account without OPTION_SHOW_REPLACE option
+    #                                                                                                                       only (OPTION_SHOW_REPLACE implies SEARCH button)
     OPTION_SHOW_BUTTON_REGEX =          0b00000000000000000000001000000000  # display REGULAR EXPRESSION option button
     OPTION_SHOW_BUTTON_CASESENSITIVE =  0b00000000000000000000010000000000  # display CASE SENSITIVE option button
     OPTION_SHOW_BUTTON_WHOLEWORD =      0b00000000000000000000100000000000  # display WHOLE WORD option button
@@ -140,21 +160,23 @@ class WSearchInput(QWidget):
 
     OPTION_SHOW_REPLACE =               0b00000000000000010000000000000000  # display REPLACE text entry and button
 
+    OPTION_HIDE_VSEPARATORR =           0b00100000000000000000000000000000  # hide right vertical separator
+    OPTION_HIDE_VSEPARATORL =           0b01000000000000000000000000000000  # hide left vertical separator
     OPTION_STATE_BUTTONSHOW =           0b10000000000000000000000000000000  # without OPTION_SHOW_REPLACE option only
 
     OPTION_ALL_BUTTONS =                0b00000000000000001111111100000000
     OPTION_ALL_SEARCH =                 0b00000000000000000000000000011111
-    OPTION_ALL =                        0b10000000000000011111111100011111
+    OPTION_ALL =                        0b11100000000000011111111100011111
 
     def __init__(self, options=None, parent=None):
         super(WSearchInput, self).__init__(parent)
 
-        font=self.font()
+        font = self.font()
         font.setStyleHint(QFont.Monospace)
-        font.setFamily("Monospace")
+        font.setFamily('DejaVu Sans Mono, Consolas, Courier New')
 
         # entries
-        self.__leSearch=QLineEdit()
+        self.__leSearch = QLineEdit()
         self.__leSearch.returnPressed.connect(self.applySearch)
         self.__leSearch.textChanged.connect(self. __searchTextModified)
         self.__leSearch.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
@@ -162,8 +184,7 @@ class WSearchInput(QWidget):
         replaceLineEditClearButton(self.__leSearch)
         self.__leSearch.setFont(font)
 
-
-        self.__leReplace=QLineEdit()
+        self.__leReplace = QLineEdit()
         self.__leReplace.returnPressed.connect(self.applyReplace)
         self.__leReplace.textChanged.connect(self. __replaceTextModified)
         self.__leReplace.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
@@ -172,31 +193,31 @@ class WSearchInput(QWidget):
         self.__leReplace.setFont(font)
 
         # buttons
-        self.__btSearch=QToolButton()
+        self.__btSearch = QToolButton()
         self.__btSearch.setAutoRaise(True)
         self.__btSearch.setToolTip(i18n('Search'))
         self.__btSearch.setIcon(buildIcon("pktk:search"))
 
-        self.__btSRSearch=QPushButton(i18n('Search'))
+        self.__btSRSearch = QPushButton(i18n('Search'))
         self.__btSRSearch.setToolTip(i18n('Search next occurence'))
 
-        self.__btSRSearchAll=QPushButton(i18n('Search All'))
+        self.__btSRSearchAll = QPushButton(i18n('Search All'))
         self.__btSRSearchAll.setToolTip(i18n('Search all occurences'))
 
-        self.__btSRReplace=QPushButton(i18n('Replace'))
+        self.__btSRReplace = QPushButton(i18n('Replace'))
         self.__btSRReplace.setToolTip(i18n('Replace next occurence'))
-        self.__btSRReplaceAll=QPushButton(i18n('Replace All'))
+        self.__btSRReplaceAll = QPushButton(i18n('Replace All'))
         self.__btSRReplaceAll.setToolTip(i18n('Replace all occurences'))
 
         # options button
-        self.__vlN1=WVLine()
-        self.__vlN2=WVLine()
+        self.__vlN1 = WVLine()
+        self.__vlN2 = WVLine()
 
-        self.__btRegEx=QToolButton()
-        self.__btCaseSensitive=QToolButton()
-        self.__btWholeWord=QToolButton()
-        self.__btBackward=QToolButton()
-        self.__btHighlightAll=QToolButton()
+        self.__btRegEx = QToolButton()
+        self.__btCaseSensitive = QToolButton()
+        self.__btWholeWord = QToolButton()
+        self.__btBackward = QToolButton()
+        self.__btHighlightAll = QToolButton()
 
         self.__btRegEx.setAutoRaise(True)
         self.__btCaseSensitive.setAutoRaise(True)
@@ -222,8 +243,8 @@ class WSearchInput(QWidget):
         self.__btBackward.setIcon(buildIcon("pktk:filter_backward"))
         self.__btHighlightAll.setIcon(buildIcon("pktk:filter_highlightall"))
 
-        self.__wOptionButtons=QWidget()
-        self.__lOptionButtons=QHBoxLayout()
+        self.__wOptionButtons = QWidget()
+        self.__lOptionButtons = QHBoxLayout()
         self.__lOptionButtons.addWidget(self.__vlN1)
         self.__lOptionButtons.addWidget(self.__btRegEx)
         self.__lOptionButtons.addWidget(self.__btCaseSensitive)
@@ -237,27 +258,31 @@ class WSearchInput(QWidget):
 
         self.__wOptionButtons.setLayout(self.__lOptionButtons)
 
-        self.__btShowHide=QToolButton()
+        self.__btShowHide = QToolButton()
         self.__btShowHide.setAutoRaise(True)
         self.__btShowHide.setCheckable(True)
         self.__btShowHide.setToolTip(i18n('Show/Hide search options'))
         self.__btShowHide.setIcon(buildIcon("pktk:tune"))
 
-
         # informations
-        font=self.font()
+        font = self.font()
         font.setPointSizeF(font.pointSizeF()*0.9)
 
-        self.__foundResultsInfo=QLabel()
+        self.__foundResultsInfo = QLabel()
         self.__foundResultsInfo.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
         self.__foundResultsInfo.setFont(font)
 
-        self.__optionsInfo=QLabel()
-        self.__optionsInfo.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
+        palette = self.palette()
+        color = palette.color(QPalette.Active, QPalette.Text)
+        color.setAlpha(128)
+        self.__optionsInfo = WLabelElide(Qt.ElideLeft)
+        self.__optionsInfo.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
         self.__optionsInfo.setFont(font)
+        self.__optionsInfo.setStyleSheet(f"color: {color.name(QColor.HexArgb)};")
+        self.__optionsInfo.setMinimumWidth(1)
 
-        self.__wSRInfo=QWidget()
-        self.__lSRInfo=QHBoxLayout()
+        self.__wSRInfo = QWidget()
+        self.__lSRInfo = QHBoxLayout()
         self.__lSRInfo.addWidget(self.__foundResultsInfo)
         self.__lSRInfo.addWidget(self.__optionsInfo)
         self.__lSRInfo.addWidget(self.__wOptionButtons)
@@ -266,7 +291,6 @@ class WSearchInput(QWidget):
         self.__lSRInfo.setSpacing(3)
 
         self.__wSRInfo.setLayout(self.__lSRInfo)
-
 
         # manage signals
         self.__btSRSearch.clicked.connect(self.applySearch)
@@ -284,42 +308,46 @@ class WSearchInput(QWidget):
         self.__btShowHide.toggled.connect(self.__updateInterface)
 
         # layout option Search
-        self.__layout=None
-        self.__currentLayoutId=None
+        self.__layout = None
+        self.__currentLayoutId = None
 
-        self.__options=0
+        self.__options = 0
         if options is None:
-            options=WSearchInput.OPTION_ALL_BUTTONS|WSearchInput.OPTION_STATE_BUTTONSHOW
+            options = WSearchInput.OPTION_ALL_BUTTONS | WSearchInput.OPTION_STATE_BUTTONSHOW
 
-        self.__btShowHide.setChecked(self.__options&WSearchInput.OPTION_STATE_BUTTONSHOW==WSearchInput.OPTION_STATE_BUTTONSHOW)
+        self.__btShowHide.setChecked(self.__options & WSearchInput.OPTION_STATE_BUTTONSHOW == WSearchInput.OPTION_STATE_BUTTONSHOW)
         self.setOptions(options)
-
+        self.__searchOptionChanged()
 
     def __updateInterface(self, visible=None):
         """Update user interface"""
         # search option group is not empty if at least one button is defined as available in options
-        groupNotEmpty=(WSearchInput.OPTION_SHOW_BUTTON_REGEX|
-                       WSearchInput.OPTION_SHOW_BUTTON_CASESENSITIVE|
-                       WSearchInput.OPTION_SHOW_BUTTON_WHOLEWORD|
-                       WSearchInput.OPTION_SHOW_BUTTON_BACKWARD|
-                       WSearchInput.OPTION_SHOW_BUTTON_HIGHLIGHTALL)!=0
+        groupNotEmpty = (WSearchInput.OPTION_SHOW_BUTTON_REGEX |
+                         WSearchInput.OPTION_SHOW_BUTTON_CASESENSITIVE |
+                         WSearchInput.OPTION_SHOW_BUTTON_WHOLEWORD |
+                         WSearchInput.OPTION_SHOW_BUTTON_BACKWARD |
+                         WSearchInput.OPTION_SHOW_BUTTON_HIGHLIGHTALL) != 0
 
-        #search option group buttons are visible if button is defined as available in options
-        self.__btRegEx.setVisible(self.__options&WSearchInput.OPTION_SHOW_BUTTON_REGEX==WSearchInput.OPTION_SHOW_BUTTON_REGEX)
-        self.__btCaseSensitive.setVisible(self.__options&WSearchInput.OPTION_SHOW_BUTTON_CASESENSITIVE==WSearchInput.OPTION_SHOW_BUTTON_CASESENSITIVE)
-        self.__btWholeWord.setVisible(self.__options&WSearchInput.OPTION_SHOW_BUTTON_WHOLEWORD==WSearchInput.OPTION_SHOW_BUTTON_WHOLEWORD)
-        self.__btBackward.setVisible(self.__options&WSearchInput.OPTION_SHOW_BUTTON_BACKWARD==WSearchInput.OPTION_SHOW_BUTTON_BACKWARD)
-        self.__btHighlightAll.setVisible(self.__options&WSearchInput.OPTION_SHOW_BUTTON_HIGHLIGHTALL==WSearchInput.OPTION_SHOW_BUTTON_HIGHLIGHTALL)
+        # search option group buttons are visible if button is defined as available in options
+        self.__btRegEx.setVisible(self.__options & WSearchInput.OPTION_SHOW_BUTTON_REGEX == WSearchInput.OPTION_SHOW_BUTTON_REGEX)
+        self.__btCaseSensitive.setVisible(self.__options & WSearchInput.OPTION_SHOW_BUTTON_CASESENSITIVE == WSearchInput.OPTION_SHOW_BUTTON_CASESENSITIVE)
+        self.__btWholeWord.setVisible(self.__options & WSearchInput.OPTION_SHOW_BUTTON_WHOLEWORD == WSearchInput.OPTION_SHOW_BUTTON_WHOLEWORD)
+        self.__btBackward.setVisible(self.__options & WSearchInput.OPTION_SHOW_BUTTON_BACKWARD == WSearchInput.OPTION_SHOW_BUTTON_BACKWARD)
+        self.__btHighlightAll.setVisible(self.__options & WSearchInput.OPTION_SHOW_BUTTON_HIGHLIGHTALL == WSearchInput.OPTION_SHOW_BUTTON_HIGHLIGHTALL)
 
-        self.__btRegEx.setChecked(self.__options&SearchOptions.REGEX==SearchOptions.REGEX)
-        self.__btCaseSensitive.setChecked(self.__options&SearchOptions.CASESENSITIVE==SearchOptions.CASESENSITIVE)
-        self.__btWholeWord.setChecked(self.__options&SearchOptions.WHOLEWORD==SearchOptions.WHOLEWORD)
-        self.__btBackward.setChecked(self.__options&SearchOptions.BACKWARD==SearchOptions.BACKWARD)
-        self.__btHighlightAll.setChecked(self.__options&SearchOptions.HIGHLIGHT==SearchOptions.HIGHLIGHT)
+        # need to work from a temporary value as when button check status is modified, self.__options is recalculated
+        # and in some case weird results occured
+        tmpOptions = self.__options
+        self.__btRegEx.setChecked((tmpOptions & SearchOptions.REGEX) == SearchOptions.REGEX)
+        self.__btCaseSensitive.setChecked((tmpOptions & SearchOptions.CASESENSITIVE) == SearchOptions.CASESENSITIVE)
+        self.__btWholeWord.setChecked((tmpOptions & SearchOptions.WHOLEWORD) == SearchOptions.WHOLEWORD)
+        self.__btBackward.setChecked((tmpOptions & SearchOptions.BACKWARD) == SearchOptions.BACKWARD)
+        self.__btHighlightAll.setChecked((tmpOptions & SearchOptions.HIGHLIGHT) == SearchOptions.HIGHLIGHT)
 
+        self.__options = tmpOptions
 
-        if self.__options&WSearchInput.OPTION_SHOW_REPLACE==WSearchInput.OPTION_SHOW_REPLACE:
-            # search and replace UI
+        if self.__options & WSearchInput.OPTION_SHOW_REPLACE == WSearchInput.OPTION_SHOW_REPLACE:
+            # search and replace UI
             self.__vlN1.setVisible(False)
             self.__vlN2.setVisible(False)
 
@@ -329,16 +357,16 @@ class WSearchInput(QWidget):
             # search option group is visible if not empty
             self.__wOptionButtons.setVisible(groupNotEmpty)
         else:
-            # search only UI
-            self.__vlN1.setVisible(True)
-            self.__vlN2.setVisible(True)
+            # search only UI
+            self.__vlN1.setVisible((self.__options & WSearchInput.OPTION_HIDE_VSEPARATORL) != WSearchInput.OPTION_HIDE_VSEPARATORL)
+            self.__vlN2.setVisible((self.__options & WSearchInput.OPTION_HIDE_VSEPARATORR) != WSearchInput.OPTION_HIDE_VSEPARATORR)
 
-            self.__btSearch.setVisible(self.__options&WSearchInput.OPTION_SHOW_BUTTON_SEARCH==WSearchInput.OPTION_SHOW_BUTTON_SEARCH)
-            self.__btShowHide.setVisible(self.__options&WSearchInput.OPTION_SHOW_BUTTON_SHOWHIDE==WSearchInput.OPTION_SHOW_BUTTON_SHOWHIDE)
+            self.__btSearch.setVisible(self.__options & WSearchInput.OPTION_SHOW_BUTTON_SEARCH == WSearchInput.OPTION_SHOW_BUTTON_SEARCH)
+            self.__btShowHide.setVisible(self.__options & WSearchInput.OPTION_SHOW_BUTTON_SHOWHIDE == WSearchInput.OPTION_SHOW_BUTTON_SHOWHIDE)
 
             if visible is None:
                 # use value from __options (called from setOption() method)
-                self.__btShowHide.setChecked(self.__options&WSearchInput.OPTION_STATE_BUTTONSHOW==WSearchInput.OPTION_STATE_BUTTONSHOW)
+                self.__btShowHide.setChecked(self.__options & WSearchInput.OPTION_STATE_BUTTONSHOW == WSearchInput.OPTION_STATE_BUTTONSHOW)
             else:
                 # use value from parameter visible (called from signal emitted when button is toggled)
                 self.__btShowHide.setChecked(visible)
@@ -347,91 +375,87 @@ class WSearchInput(QWidget):
             # - button show/hide is not visible
             # OR
             # - button show/hide is visible AND checked
-            self.__wOptionButtons.setVisible(groupNotEmpty and ((not (self.__options&WSearchInput.OPTION_SHOW_BUTTON_SHOWHIDE==WSearchInput.OPTION_SHOW_BUTTON_SHOWHIDE)) or self.__btShowHide.isChecked()))
-
+            self.__wOptionButtons.setVisible(groupNotEmpty and ((not (self.__options & WSearchInput.OPTION_SHOW_BUTTON_SHOWHIDE == WSearchInput.OPTION_SHOW_BUTTON_SHOWHIDE)) or
+                                                                self.__btShowHide.isChecked()))
 
     def __searchOptionChanged(self):
         """Search option has been changed, emit signal"""
-        self.searchOptionModified.emit(self.__leSearch.text(), self.options()&WSearchInput.OPTION_ALL_SEARCH)
+        self.searchOptionModified.emit(self.__leSearch.text(), self.options() & WSearchInput.OPTION_ALL_SEARCH)
 
-        if self.__currentLayoutId==WSearchInput.OPTION_SHOW_REPLACE:
-            optionsInfo=[]
+        if self.__currentLayoutId == WSearchInput.OPTION_SHOW_REPLACE:
+            optionsInfo = []
 
-            if self.__options&SearchOptions.REGEX==SearchOptions.REGEX:
+            if self.__options & SearchOptions.REGEX == SearchOptions.REGEX:
                 optionsInfo.append(i18n('Regular expression'))
 
-            if self.__options&SearchOptions.CASESENSITIVE==SearchOptions.CASESENSITIVE:
+            if self.__options & SearchOptions.CASESENSITIVE == SearchOptions.CASESENSITIVE:
                 optionsInfo.append(i18n('Case sensitive'))
             else:
                 optionsInfo.append(i18n('Case insensitive'))
 
-            if self.__options&SearchOptions.WHOLEWORD==SearchOptions.WHOLEWORD:
+            if self.__options & SearchOptions.WHOLEWORD == SearchOptions.WHOLEWORD:
                 optionsInfo.append(i18n('Whole words'))
 
-            if self.__options&SearchOptions.BACKWARD==SearchOptions.BACKWARD:
+            if self.__options & SearchOptions.BACKWARD == SearchOptions.BACKWARD:
                 optionsInfo.append(i18n('Backward direction'))
 
-            if self.__options&SearchOptions.HIGHLIGHT==SearchOptions.HIGHLIGHT:
+            if self.__options & SearchOptions.HIGHLIGHT == SearchOptions.HIGHLIGHT:
                 optionsInfo.append(i18n('Highlight all found occurences'))
 
-            self.__optionsInfo.setText(i18n('Finding with options: <i>')+', '.join(optionsInfo)+'</i>')
-
+            self.__optionsInfo.setText(f"{i18n('Finding with options:')} {', '.join(optionsInfo)}")
 
     def __searchTextModified(self):
         """Search value has been modified, emit signal"""
-        self.searchModified.emit(self.__leSearch.text(), self.options()&WSearchInput.OPTION_ALL_SEARCH)
-
+        self.searchModified.emit(self.__leSearch.text(), self.options() & WSearchInput.OPTION_ALL_SEARCH)
 
     def __replaceTextModified(self):
         """Replace value has been modified, emit signal"""
-        self.replaceModified.emit(self.__leSearch.text(), self.__leReplace.text(), self.options()&WSearchInput.OPTION_ALL_SEARCH)
-
+        self.replaceModified.emit(self.__leSearch.text(), self.__leReplace.text(), self.options() & WSearchInput.OPTION_ALL_SEARCH)
 
     def options(self):
         """Return current options flags"""
-        currentSearch=0
+        currentSearch = 0
         if self.__btRegEx.isChecked():
-            currentSearch|=SearchOptions.REGEX
+            currentSearch |= SearchOptions.REGEX
 
         if self.__btCaseSensitive.isChecked():
-            currentSearch|=SearchOptions.CASESENSITIVE
+            currentSearch |= SearchOptions.CASESENSITIVE
 
         if self.__btWholeWord.isChecked():
-            currentSearch|=SearchOptions.WHOLEWORD
+            currentSearch |= SearchOptions.WHOLEWORD
 
         if self.__btBackward.isChecked():
-            currentSearch|=SearchOptions.BACKWARD
+            currentSearch |= SearchOptions.BACKWARD
 
         if self.__btHighlightAll.isChecked():
-            currentSearch|=SearchOptions.HIGHLIGHT
+            currentSearch |= SearchOptions.HIGHLIGHT
 
-        if self.__btShowHide.isChecked() or (self.__options&WSearchInput.OPTION_SHOW_BUTTON_SHOWHIDE!=WSearchInput.OPTION_SHOW_BUTTON_SHOWHIDE):
-            currentSearch|=WSearchInput.OPTION_STATE_BUTTONSHOW
+        if self.__btShowHide.isChecked() or (self.__options & WSearchInput.OPTION_SHOW_BUTTON_SHOWHIDE != WSearchInput.OPTION_SHOW_BUTTON_SHOWHIDE):
+            currentSearch |= WSearchInput.OPTION_STATE_BUTTONSHOW
 
-        self.__options=(self.__options&(WSearchInput.OPTION_ALL_BUTTONS|WSearchInput.OPTION_SHOW_REPLACE))|currentSearch
+        self.__options = (self.__options & (WSearchInput.OPTION_ALL_BUTTONS | WSearchInput.OPTION_SHOW_REPLACE)) | currentSearch
 
         return self.__options
-
 
     def setOptions(self, options):
         """Set current options flags"""
         if isinstance(options, int):
-            self.__options=options&WSearchInput.OPTION_ALL
+            self.__options = options & WSearchInput.OPTION_ALL
 
-            if self.__currentLayoutId!=(self.__options&WSearchInput.OPTION_SHOW_REPLACE):
-                self.__currentLayoutId=self.__options&WSearchInput.OPTION_SHOW_REPLACE
+            if self.__currentLayoutId != (self.__options & WSearchInput.OPTION_SHOW_REPLACE):
+                self.__currentLayoutId = self.__options & WSearchInput.OPTION_SHOW_REPLACE
                 if self.__layout:
                     while self.__layout.count():
-                        item=self.__layout.takeAt(0)
-                        widget=item.widget()
+                        item = self.__layout.takeAt(0)
+                        widget = item.widget()
                         if widget is not None:
                             widget.setParent(None)
 
                     del self.__layout
-                    self.__layout=None
+                    self.__layout = None
 
-                if self.__currentLayoutId==WSearchInput.OPTION_SHOW_REPLACE:
-                    self.__layout=QGridLayout()
+                if self.__currentLayoutId == WSearchInput.OPTION_SHOW_REPLACE:
+                    self.__layout = QGridLayout()
                     self.__layout.addWidget(self.__wSRInfo, 0, 0, 1, -1)
                     self.__layout.addWidget(self.__leSearch, 1, 0)
                     self.__layout.addWidget(self.__btSRSearch, 1, 1)
@@ -444,7 +468,7 @@ class WSearchInput(QWidget):
                     self.__layout.setColumnStretch(2, 1)
                     self.__layout.setSpacing(4)
                 else:
-                    self.__layout=QHBoxLayout()
+                    self.__layout = QHBoxLayout()
                     self.__layout.addWidget(self.__leSearch)
                     self.__layout.addWidget(self.__btSearch)
                     self.__layout.addWidget(self.__wOptionButtons)
@@ -457,41 +481,33 @@ class WSearchInput(QWidget):
 
             self.__updateInterface()
 
-
     def applySearch(self):
         """Search button clicked or Return key pressed, emit signal"""
-        self.searchActivated.emit(self.__leSearch.text(), self.options()&WSearchInput.OPTION_ALL_SEARCH, False)
-
+        self.searchActivated.emit(self.__leSearch.text(), self.options() & WSearchInput.OPTION_ALL_SEARCH, False)
 
     def applyReplace(self):
         """Replace button clicked or Return key pressed, emit signal"""
-        self.replaceActivated.emit(self.__leSearch.text(), self.__leReplace.text(), self.options()&WSearchInput.OPTION_ALL_SEARCH, False)
-
+        self.replaceActivated.emit(self.__leSearch.text(), self.__leReplace.text(), self.options() & WSearchInput.OPTION_ALL_SEARCH, False)
 
     def applySearchAll(self):
         """Search All button clicked or Return key pressed, emit signal"""
-        self.searchActivated.emit(self.__leSearch.text(), self.options()&WSearchInput.OPTION_ALL_SEARCH, True)
-
+        self.searchActivated.emit(self.__leSearch.text(), self.options() & WSearchInput.OPTION_ALL_SEARCH, True)
 
     def applyReplaceAll(self):
         """Replace All button clicked or Return key pressed, emit signal"""
-        self.replaceActivated.emit(self.__leSearch.text(), self.__leReplace.text(), self.options()&WSearchInput.OPTION_ALL_SEARCH, True)
-
+        self.replaceActivated.emit(self.__leSearch.text(), self.__leReplace.text(), self.options() & WSearchInput.OPTION_ALL_SEARCH, True)
 
     def searchText(self):
         """Return current search text"""
         return self.__leSearch.text()
 
-
     def setSearchText(self, text):
         """Set current search text"""
         self.__leSearch.setText(text)
 
-
     def replaceText(self):
         """Return current replace text"""
         return self.__leReplace.text()
-
 
     def setReplaceText(self, text):
         """Set current replace text"""
@@ -500,9 +516,20 @@ class WSearchInput(QWidget):
     def setResultsInformation(self, text):
         self.__foundResultsInfo.setText(text)
 
+    def qLineEditSearch(self):
+        """Return search line edit"""
+        return self.__leSearch
+
+    def qLineEditReplace(self):
+        """Return replace line edit"""
+        return self.__leReplace
+
 
 class SearchFromPlainTextEdit:
     """Provide high level method to search ocurences in a QPlainTextEdit"""
+
+    EXTRASELECTIONTYPE_HIGHLIGHTEDSEARCH = 0x0F00
+    EXTRASELECTIONTYPE_CURRENTSEARCH =     0x0F01
 
     COLOR_SEARCH_ALL = 0
     COLOR_SEARCH_CURRENT_BG = 'highlightSearchCurrent.bg'
@@ -512,100 +539,99 @@ class SearchFromPlainTextEdit:
         if not isinstance(plainTextEdit, QPlainTextEdit):
             raise EInvalidType("Given `plainTextEdit` must be a <QPlainTextEdit>")
 
-        self.__plainTextEdit=plainTextEdit
+        self.__plainTextEdit = plainTextEdit
 
         # search results
-        self.__extraSelectionsFoundAll=[]
-        self.__extraSelectionsFoundCurrent=None
-        self.__lastFound=None
+        self.__extraSelectionsFoundAll = []
+        self.__extraSelectionsFoundCurrent = None
+        self.__lastFound = None
 
-        self.__searchColors={
-                SearchFromPlainTextEdit.COLOR_SEARCH_ALL:           QColor("#77ffc706"),
+        self.__searchColors = {
+                SearchFromPlainTextEdit.COLOR_SEARCH_ALL:           QColor("#409adf95"),
                 SearchFromPlainTextEdit.COLOR_SEARCH_CURRENT_BG:    QColor("#9900b86f"),
                 SearchFromPlainTextEdit.COLOR_SEARCH_CURRENT_FG:    QColor("#ffff00")
             }
 
-
-    def __highlightedSelections(self):
-        """Build extra selection for highlighting"""
-        foundCurrentAdded=False
-        if self.__extraSelectionsFoundCurrent is None:
-            returned=self.__extraSelectionsFoundAll
-        else:
-            returned=[]
-            for cursorFromAll in self.__extraSelectionsFoundAll:
-                if cursorFromAll.cursor==self.__extraSelectionsFoundCurrent.cursor:
-                    returned.append(self.__extraSelectionsFoundCurrent)
-                    foundCurrentAdded=True
-                else:
-                    returned.append(cursorFromAll)
-
-        if not foundCurrentAdded and not self.__extraSelectionsFoundCurrent is None:
-            returned.append(self.__extraSelectionsFoundCurrent)
-
-        return returned
+    def __getExtraSelections(self, filteredOn, stopOnFirst):
+        """Return extra selection from self.__plainTextEdit, without `filteredOn` extra selection"""
+        # get a copy of extra selection from plaintext edit on which cleanup have to be made
+        extraSelections = self.__plainTextEdit.extraSelections()
+        filterExtraSelections(extraSelections, filteredOn, EXTRASELECTION_FILTER_REMOVE, stopOnFirst=stopOnFirst)
+        return extraSelections
 
     def clearCurrent(self):
         """Clear current found selection"""
         if self.__extraSelectionsFoundCurrent:
-            extraSelections=self.__plainTextEdit.extraSelections()
+            extraSelections = self.__plainTextEdit.extraSelections()
             for extraSelection in extraSelections:
-                if extraSelection.format.boolProperty(0x01):
+                if extraSelection.format.property(QTextFormat.UserProperty) == SearchFromPlainTextEdit.EXTRASELECTIONTYPE_CURRENTSEARCH:
                     extraSelections.remove(extraSelection)
+                    self.__plainTextEdit.setExtraSelections(extraSelections)
                     break
-            self.__extraSelectionsFoundCurrent=None
-
+            self.__extraSelectionsFoundCurrent = None
 
     def searchAll(self, text, options=0):
-        """Search all occurences of `text` in console
+        """Search all occurences of `text`
 
         If `text` is None or empty string, and option SEARCH_OPTION_HIGHLIGHT is set,
         it will clear all current selected items
 
         Options is combination of SearchOptions flags:
-            HIGHLIGHT =       highlight the found occurences in console
+            HIGHLIGHT =       highlight the found occurences
             REGEX =           consider text as a regular expression
             WHOLEWORD =       search for while words only
             CASESENSITIVE =   search with case sensitive
 
         Return list of cursors
         """
-        extraSelectionsFoundAll=[]
+        extraSelections = self.__getExtraSelections(SearchFromPlainTextEdit.EXTRASELECTIONTYPE_HIGHLIGHTEDSEARCH, False)
+        extraSelectionsFoundAll = []
 
-        if (text is None or text=='') and options&SearchOptions.HIGHLIGHT==SearchOptions.HIGHLIGHT:
-            # clear current selections
-            self.__extraSelectionsFoundAll=[]
-            self.__plainTextEdit.setExtraSelections(self.__highlightedSelections())
+        if options & SearchOptions.REGEX == SearchOptions.REGEX:
+            if not regExIsValid(text):
+                # force to exit search
+                text = None
+
+        if (text is None or text == '') and options & SearchOptions.HIGHLIGHT == SearchOptions.HIGHLIGHT:
+            # clear current selections
+            self.__extraSelectionsFoundAll = []
+            self.__plainTextEdit.setExtraSelections(extraSelections)
             return self.__extraSelectionsFoundAll
 
-        findFlags=0
-        if options&SearchOptions.WHOLEWORD==SearchOptions.WHOLEWORD:
-            findFlags|=QTextDocument.FindWholeWords
-        if options&SearchOptions.CASESENSITIVE==SearchOptions.CASESENSITIVE:
-            findFlags|=QTextDocument.FindCaseSensitively
-        if options&SearchOptions.REGEX==SearchOptions.REGEX:
-            text=QRegularExpression(text)
+        findFlags = 0
+        if options & SearchOptions.WHOLEWORD == SearchOptions.WHOLEWORD:
+            findFlags |= QTextDocument.FindWholeWords
+        if options & SearchOptions.CASESENSITIVE == SearchOptions.CASESENSITIVE:
+            findFlags |= QTextDocument.FindCaseSensitively
+        if options & SearchOptions.REGEX == SearchOptions.REGEX:
+            text = QRegularExpression(text, QRegularExpression.MultilineOption | QRegularExpression.UseUnicodePropertiesOption | QRegularExpression.DotMatchesEverythingOption)
 
+        cursor = self.__plainTextEdit.document().find(text, 0, QTextDocument.FindFlags(findFlags))
+        while cursor.selectionStart() > -1:
+            extraSelection = QTextEdit.ExtraSelection()
 
-        cursor=self.__plainTextEdit.document().find(text, 0, QTextDocument.FindFlags(findFlags))
-        while cursor.position()>0:
-            extraSelection=QTextEdit.ExtraSelection()
-
-            extraSelection.cursor=cursor
+            extraSelection.cursor = cursor
             extraSelection.format.setBackground(QBrush(self.__searchColors[SearchFromPlainTextEdit.COLOR_SEARCH_ALL]))
+            extraSelection.format.setProperty(QTextFormat.UserProperty, SearchFromPlainTextEdit.EXTRASELECTIONTYPE_HIGHLIGHTEDSEARCH)
 
             extraSelectionsFoundAll.append(extraSelection)
-            cursor=self.__plainTextEdit.document().find(text, cursor, QTextDocument.FindFlags(findFlags))
+            cursor = self.__plainTextEdit.document().find(text, cursor.selectionEnd(), QTextDocument.FindFlags(findFlags))
+            while cursor.selectionStart() > -1 and cursor.selectionStart() == cursor.selectionEnd():
+                # why!??
+                if not cursor.movePosition(QTextCursor.Right):
+                    cursor = QTextCursor()
+                    break
+                cursor = self.__plainTextEdit.document().find(text, cursor.selectionEnd(), QTextDocument.FindFlags(findFlags))
 
-        if options&SearchOptions.HIGHLIGHT==SearchOptions.HIGHLIGHT:
-            self.__extraSelectionsFoundAll=extraSelectionsFoundAll
+        if options & SearchOptions.HIGHLIGHT == SearchOptions.HIGHLIGHT:
+            self.__extraSelectionsFoundAll = extraSelectionsFoundAll
+            extraSelections += self.__extraSelectionsFoundAll
         else:
-            self.__extraSelectionsFoundAll=[]
+            self.__extraSelectionsFoundAll = []
 
-        self.__plainTextEdit.setExtraSelections(self.__highlightedSelections())
+        self.__plainTextEdit.setExtraSelections(extraSelections)
 
         return extraSelectionsFoundAll
-
 
     def searchNext(self, text, options=0, fromCursor=None):
         """Search for next occurence of `text`
@@ -622,74 +648,91 @@ class SearchFromPlainTextEdit:
 
         Return a cursor or None
         """
-        if (text is None or text=='') and options&SearchOptions.HIGHLIGHT==SearchOptions.HIGHLIGHT:
-            self.__extraSelectionsFoundCurrent=None
-            self.__plainTextEdit.setExtraSelections(self.__highlightedSelections())
+        extraSelections = self.__getExtraSelections(SearchFromPlainTextEdit.EXTRASELECTIONTYPE_CURRENTSEARCH, True)
+        if (text is None or text == '') and options & SearchOptions.HIGHLIGHT == SearchOptions.HIGHLIGHT:
+            self.__extraSelectionsFoundCurrent = None
+            self.__plainTextEdit.setExtraSelections(extraSelections)
             return self.__extraSelectionsFoundCurrent
 
-        findFlags=0
-        if options&SearchOptions.WHOLEWORD==SearchOptions.WHOLEWORD:
-            findFlags|=QTextDocument.FindWholeWords
-        if options&SearchOptions.CASESENSITIVE==SearchOptions.CASESENSITIVE:
-            findFlags|=QTextDocument.FindCaseSensitively
-        if options&SearchOptions.BACKWARD==SearchOptions.BACKWARD:
-            findFlags|=QTextDocument.FindBackward
+        findFlags = 0
+        if options & SearchOptions.WHOLEWORD == SearchOptions.WHOLEWORD:
+            findFlags |= QTextDocument.FindWholeWords
+        if options & SearchOptions.CASESENSITIVE == SearchOptions.CASESENSITIVE:
+            findFlags |= QTextDocument.FindCaseSensitively
+        if options & SearchOptions.BACKWARD == SearchOptions.BACKWARD:
+            findFlags |= QTextDocument.FindBackward
 
-        if options&SearchOptions.REGEX==SearchOptions.REGEX:
-            text=QRegularExpression(text)
+        if options & SearchOptions.REGEX == SearchOptions.REGEX:
+            text = QRegularExpression(text, QRegularExpression.MultilineOption | QRegularExpression.UseUnicodePropertiesOption | QRegularExpression.DotMatchesEverythingOption)
 
         if not isinstance(fromCursor, (int, QTextCursor)):
             if self.__extraSelectionsFoundCurrent is None:
-                cursor=self.__plainTextEdit.textCursor().position()
+                cursor = self.__plainTextEdit.textCursor()
             else:
-                cursor=self.__extraSelectionsFoundCurrent.cursor
+                cursor = self.__extraSelectionsFoundCurrent.cursor
+        elif isinstance(fromCursor, QTextCursor):
+            cursor = fromCursor
         else:
-            cursor=fromCursor
+            cursor = QTextCursor(self.__plainTextEdit.document())
+            cursor.setPosition(fromCursor)
 
-        found=self.__plainTextEdit.document().find(text, cursor, QTextDocument.FindFlags(findFlags))
-        loopNumber=0
-        while loopNumber<=1:
+        found = self.__plainTextEdit.document().find(text, cursor, QTextDocument.FindFlags(findFlags))
+        loopNumber = 0
+        while loopNumber <= 1:
             # check found occurence
-            if found is None or found.position()==-1:
-                loopNumber+=1
+            if found is None or found.selectionStart() == -1:
+                loopNumber += 1
 
                 # nothing found: may be we need to loop
-                if options&SearchOptions.BACKWARD==SearchOptions.BACKWARD:
-                    cursor=self.__plainTextEdit.document().characterCount()
+                if options & SearchOptions.BACKWARD == SearchOptions.BACKWARD:
+                    cursor.movePosition(QTextCursor.End)
                 else:
-                    cursor=0
+                    cursor.movePosition(QTextCursor.Start)
 
-                found=self.__plainTextEdit.document().find(text, cursor, QTextDocument.FindFlags(findFlags))
+                found = self.__plainTextEdit.document().find(text, cursor, QTextDocument.FindFlags(findFlags))
 
-                if not found is None and found.position()==-1:
-                    found=None
-
+                if found is not None and found.selectionStart() == -1:
+                    found = None
 
             if found and not found.block().isVisible():
                 # something found, but not visible
-                found=self.__plainTextEdit.document().find(text, found, QTextDocument.FindFlags(findFlags))
+                found = self.__plainTextEdit.document().find(text, found, QTextDocument.FindFlags(findFlags))
             elif found:
-                break
+                while found.selectionStart() > -1 and found.selectionStart() == found.selectionEnd():
+                    # why!??
+                    cursor = found
+                    if options & SearchOptions.BACKWARD == SearchOptions.BACKWARD:
+                        ok = cursor.movePosition(QTextCursor.Left)
+                    else:
+                        ok = cursor.movePosition(QTextCursor.Right)
 
-        if options&SearchOptions.HIGHLIGHT==SearchOptions.HIGHLIGHT and not found is None:
-            self.__extraSelectionsFoundCurrent=QTextEdit.ExtraSelection()
+                    if not ok:
+                        found = None
+                        break
+                    found = self.__plainTextEdit.document().find(text, cursor, QTextDocument.FindFlags(findFlags))
+
+                if found:
+                    break
+
+        if options & SearchOptions.HIGHLIGHT == SearchOptions.HIGHLIGHT and found is not None:
+            self.__extraSelectionsFoundCurrent = QTextEdit.ExtraSelection()
             self.__extraSelectionsFoundCurrent.format.setBackground(QBrush(self.__searchColors[SearchFromPlainTextEdit.COLOR_SEARCH_CURRENT_BG]))
             self.__extraSelectionsFoundCurrent.format.setForeground(QBrush(self.__searchColors[SearchFromPlainTextEdit.COLOR_SEARCH_CURRENT_FG]))
-            self.__extraSelectionsFoundCurrent.format.setProperty(0x01, True)
-            self.__extraSelectionsFoundCurrent.cursor=found
+            self.__extraSelectionsFoundCurrent.format.setProperty(QTextFormat.UserProperty, SearchFromPlainTextEdit.EXTRASELECTIONTYPE_CURRENTSEARCH)
+            self.__extraSelectionsFoundCurrent.cursor = found
+            extraSelections.append(self.__extraSelectionsFoundCurrent)
         else:
-            self.__extraSelectionsFoundCurrent=None
+            self.__extraSelectionsFoundCurrent = None
 
-        self.__plainTextEdit.setExtraSelections(self.__highlightedSelections())
+        self.__plainTextEdit.setExtraSelections(extraSelections)
 
-        if not self.__extraSelectionsFoundCurrent is None:
-            cursor=QTextCursor(self.__extraSelectionsFoundCurrent.cursor)
+        if self.__extraSelectionsFoundCurrent is not None:
+            cursor = QTextCursor(self.__extraSelectionsFoundCurrent.cursor)
             cursor.clearSelection()
             self.__plainTextEdit.setTextCursor(cursor)
             self.__plainTextEdit.centerCursor()
 
         return found
-
 
     def replaceNext(self, searchText, replaceText, options=0):
         """Search for next occurence of `searchText` and replace it with `replaceText`
@@ -709,29 +752,30 @@ class SearchFromPlainTextEdit:
             self.searchNext(searchText, options)
 
         if self.__extraSelectionsFoundCurrent is None:
-            # nothing to change
+            # nothing to change
             return False
 
-        cursor=self.__extraSelectionsFoundCurrent.cursor
+        cursor = self.__extraSelectionsFoundCurrent.cursor
 
+        text = cursor.block().text()
 
-        text=cursor.block().text()
+        selStart = cursor.selectionStart()-cursor.block().position()
+        selEnd = cursor.selectionEnd()-cursor.block().position()
 
-        selStart=cursor.selectionStart()-cursor.block().position()
-        selEnd=cursor.selectionEnd()-cursor.block().position()
-
-        replaceRegEx=options&SearchOptions.REGEX==SearchOptions.REGEX
-        replaceWithValue=replaceText
+        replaceRegEx = options & SearchOptions.REGEX == SearchOptions.REGEX
+        replaceWithValue = replaceText
 
         if replaceRegEx:
-            if reResult:=re.search(searchText, text[selStart:selEnd]):
+            if reResult := re.search(searchText, text[selStart:selEnd]):
                 for index, replace in enumerate(reResult.groups()):
-                    replaceWithValue=replaceWithValue.replace(f'${index+1}', replace)
+                    replaceWithValue = replaceWithValue.replace(f'${index+1}', replace)
 
         cursor.insertText(replaceWithValue)
+        if options & SearchOptions.BACKWARD == SearchOptions.BACKWARD:
+            self.searchNext(searchText, options)
+
         self.searchNext(searchText, options)
         return True
-
 
     def replaceAll(self, searchText, replaceText, options=0):
         """Search all occurences of `searchText` and replace it with `replaceText`
@@ -747,43 +791,41 @@ class SearchFromPlainTextEdit:
 
         return number of occurences replaced
         """
-        cursor=self.__plainTextEdit.textCursor()
-        returned=0
-        found=self.searchNext(searchText, options&(WSearchInput.OPTION_ALL^SearchOptions.HIGHLIGHT), 0)
+        cursor = self.__plainTextEdit.textCursor()
+        returned = 0
+        found = self.searchNext(searchText, options & (WSearchInput.OPTION_ALL ^ SearchOptions.HIGHLIGHT), 0)
 
         if found is None:
-            # nothing to change
+            # nothing to change
             return returned
 
-        replaceRegEx=options&SearchOptions.REGEX==SearchOptions.REGEX
+        replaceRegEx = options & SearchOptions.REGEX == SearchOptions.REGEX
         found.beginEditBlock()
-        lastPosition=found.selectionEnd()
+        lastPosition = found.selectionEnd()
         while True:
-            text=found.block().text()
+            text = found.block().text()
 
-            selStart=found.selectionStart()-found.block().position()
-            selEnd=found.selectionEnd()-found.block().position()
+            selStart = found.selectionStart()-found.block().position()
+            selEnd = found.selectionEnd()-found.block().position()
 
-            replaceWithValue=replaceText
+            replaceWithValue = replaceText
 
             if replaceRegEx:
-                if reResult:=re.search(searchText, text[selStart:selEnd]):
+                if reResult := re.search(searchText, text[selStart:selEnd]):
                     for index, replace in enumerate(reResult.groups()):
-                        replaceWithValue=replaceWithValue.replace(f'${index+1}', replace)
+                        replaceWithValue = replaceWithValue.replace(f'${index+1}', replace)
 
             found.insertText(replaceWithValue)
-            returned+=1
-            lastPosition=found.selectionEnd()
+            returned += 1
+            lastPosition = found.selectionEnd()
 
-            nextFound=self.searchNext(searchText, options&(WSearchInput.OPTION_ALL^SearchOptions.HIGHLIGHT), lastPosition)
-            if nextFound is None or nextFound.position()<=lastPosition:
+            nextFound = self.searchNext(searchText, options & (WSearchInput.OPTION_ALL ^ SearchOptions.HIGHLIGHT), lastPosition)
+            if nextFound is None or nextFound.position() <= lastPosition:
                 # none found, or restarted from start of document
                 break
 
             found.setPosition(nextFound.selectionStart(), QTextCursor.MoveAnchor)
             found.setPosition(nextFound.selectionEnd(), QTextCursor.KeepAnchor)
-
-
 
         found.endEditBlock()
         self.__plainTextEdit.setTextCursor(cursor)
