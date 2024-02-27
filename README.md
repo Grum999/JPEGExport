@@ -27,17 +27,20 @@ Basically, the plugin use Krita JPEG export capabilities, but add an improved in
 
 Here the list of functionalities:
 - Provides most of JPEG export options
-- Real time (~1s) export result preview
-- Exported result preview is rendered in a Krita view
-  - *Allows to zoom and scroll on export result preview to check for JPEG compression artifacts*
-- Exported JPEG file size provided
+- Real time (~1s) export result preview in a Krita view
+  - *Allows to zoom and scroll export result preview to check for JPEG compression artifacts*
 - Different render modes (Final result, difference with source)
-
+- Ability to export selected area only
+- Ability to resize exported document from given dimension constraint
+  - Maximum width, Maximum height, Bounding box, Percent of original size
+  - Choice of resampling method
+- Exported JPEG file size & dimensions provided
+- Ability to save/load different settings
 
 ## Download, Install & Execute
 
 ### Download
-+ **[ZIP ARCHIVE - v1.2.1](https://github.com/Grum999/JPEGExport/releases/download/1.2.1/jpegexport.zip)**
++ **[ZIP ARCHIVE - v1.3.0](https://github.com/Grum999/JPEGExport/releases/download/1.3.0/jpegexport.zip)**
 + **[SOURCE](https://github.com/Grum999/JPEGExport)**
 
 
@@ -53,20 +56,23 @@ Plugin installation in [Krita](https://krita.org) is not intuitive and needs som
 
 ### Execute
 
-User of Krita 4: go to **Tools**>**Scripts** menu and select **JPEG Export...**
-
-User of Krita 5: go to **File** menu and select **JPEG Export...**
-
+Go in **File** menu and select **JPEG Export...** sub-menu
 
 ### Tested platforms
 
-Version 1.2.1 requires Krita 5.2
-Version 1.2.0 requires Krita 5.1
+Version 1.3.0 requires at least Krita 5.2
 
 
 ## Plugin's life
 
 ### What's new?
+
+_[2024-02-27] Version 1.3.0_ [>> Show detailed release content <<](./releases-notes/RELEASE-1.3.0.md)
+- Implement *Improve UI*
+- Implement *Allow to define target path*
+- Implement *Settings manager*
+- Implement *Keep window position*
+- Fix bug *Save window is behind*
 
 _[2023-05-09] Version 1.2.1_ [>> Show detailed release content <<](./releases-notes/RELEASE-1.2.1.md)
 - Fix bug *Krita 5.2.0 Compatibility*
