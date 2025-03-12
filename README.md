@@ -1,5 +1,9 @@
 # JPEG Export
 
+> Note: has been moved on Codeberg
+> 
+> https://codeberg.org/Grum999/JPEGExport
+
 A plugin for [Krita](https://krita.org).
 
 
